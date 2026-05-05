@@ -1,0 +1,45 @@
+# degu
+
+> A local-first media browser. Browse, search, tag, preview, A-B-loop, trim, and rename media files without uploading anything to the cloud. A media browser that travels with your files.
+
+degu runs in two modes: as a native desktop app (macOS) or headless CLI server backed by Go and SQLite, or in "drop-on-drive" mode using the browser's File System Access API with tags stored in index.json next to the media. No accounts, no cloud, no sync service.
+
+## Key resources
+
+- [README](https://github.com/georgebuilds/degu/blob/main/README.md): Overview, features, installation, and development setup
+- [agents.md](https://github.com/georgebuilds/degu/blob/main/agents.md): Full architecture map, domain concepts, conventions, and testing notes — the primary reference for AI agents working on this repo
+- [Source code](https://github.com/georgebuilds/degu): Full repository on GitHub
+- [Releases](https://github.com/georgebuilds/degu/releases): Pre-built binaries for macOS arm64, Linux x86_64, and Windows x64
+
+## Architecture overview
+
+degu is a Go + TypeScript (Preact) project. Two runtime modes share the same SPA frontend:
+
+- App / server mode (primary): `main.go` (Wails macOS desktop) or `cmd/degu/` (headless CLI on localhost:7878). Tags stored in SQLite via `internal/db/`. The SPA auto-detects the server on boot via `/api/info`.
+- Drop-on-drive mode (FSA fallback): `dist/index.html` opened directly in a Chromium browser. Tags stored in `index.json` at the folder root via the File System Access API.
+
+Both modes use the same on-disk `index.json` format so a folder works interchangeably in either mode.
+
+## Key source files
+
+- `src/lib/storage-driver.ts` — StorageDriver interface + active driver singleton
+- `src/lib/fsa-driver.ts` — FSA mode: reads/writes index.json via the File System Access API
+- `src/lib/http-driver.ts` — Server mode: reads/writes tags via /api/tags
+- `src/lib/tags.ts` — In-memory tag store; routes through the active driver
+- `src/lib/index-json.ts` — Pure parse/serialize for the shared index.json format
+- `src/components/AppShell.tsx` — Top-level layout: mode rail + screen switcher
+- `src/components/TriageScreen.tsx` — Primary mode: card-by-card tagging of stale/untagged files
+- `src/components/FileBrowser.tsx` — Library mode: file list/grid, search, tag sidebar
+- `src/components/TagsScreen.tsx` — Tag vocabulary manager
+- `internal/db/` — SQLite tag store + legacy index.json importer
+- `internal/server/` — HTTP handler serving the SPA and /api/* routes
+
+## Tech stack
+
+Frontend: Preact 10, TypeScript, Vite 8, Tailwind CSS v4, Vitest 4
+Backend: Go 1.25, SQLite (modernc.org/sqlite, pure Go), Wails v2
+Video trim: @ffmpeg/ffmpeg + @ffmpeg/core-mt (loaded lazily from CDN)
+
+## License
+
+AGPL-3.0-or-later

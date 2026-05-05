@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- dark background -->
+  <rect width="32" height="32" rx="5" fill="#0a0f24"/>
+  <!-- subtle top-left highlight -->
+  <rect width="32" height="32" rx="5" fill="url(#shine)" opacity="0.6"/>
+  <defs>
+    <radialGradient id="shine" cx="30%" cy="20%" r="60%">
+      <stop offset="0%" stop-color="#1a2040" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#050715" stop-opacity="1"/>
+    </radialGradient>
+    <!-- glow filter for the dot -->
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="1.4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- "d" letterform — bold monospace -->
+  <text
+    x="3"
+    y="24"
+    font-family="ui-monospace,'JetBrains Mono','Courier New',Courier,monospace"
+    font-size="21"
+    font-weight="700"
+    fill="#efe7d7"
+    letter-spacing="-0.5"
+  >d</text>
+  <!-- amber period — the brand accent -->
+  <circle cx="26" cy="23" r="3.8" fill="#d4a24c" filter="url(#glow)"/>
+</svg>

@@ -1,5 +1,7 @@
 # degu
 
+*a media browser that travels with your files.*
+
 A local-first media browser. Browse, search, tag, preview, A–B-loop, trim, and rename media files without uploading anything to the cloud.
 
 degu runs two ways:

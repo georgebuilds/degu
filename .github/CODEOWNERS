@@ -1,0 +1,7 @@
+# Default owner for everything in the repo.
+* @georgebuilds
+
+# Licensing and governance — owner review required.
+LICENSE       @georgebuilds
+.github/      @georgebuilds
+agents.md     @georgebuilds

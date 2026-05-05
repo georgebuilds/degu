@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      major:
+        description: Major version
+        type: number
+        default: 0
+      minor:
+        description: Minor version
+        type: number
+        default: 1
+      patch:
+        description: Patch version
+        type: number
+        default: 0
+      notes:
+        description: Release notes body (optional)
+        type: string
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-14 # Apple Silicon runner — same arch as the artifact.
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Compute and validate tag
+        id: tag
+        run: |
+          TAG="v${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}"
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid tag format: $TAG" >&2
+            exit 1
+          fi
+          if git rev-parse "$TAG" >/dev/null 2>&1 || gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - run: npm ci
+
+      - name: Build degu.app (macOS arm64)
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          export PATH="$HOME/go/bin:$PATH"
+          wails build -platform darwin/arm64 \
+            -ldflags "-s -w -X main.version=${VERSION}"
+          ls -la build/bin/
+
+      - name: Verify the bundle
+        run: |
+          test -d build/bin/degu.app
+          test -x build/bin/degu.app/Contents/MacOS/degu
+          file build/bin/degu.app/Contents/MacOS/degu
+          /usr/bin/codesign -dv build/bin/degu.app 2>&1 || true
+
+      - name: Package as zip
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          cd build/bin
+          # `ditto` preserves macOS extended attributes / signatures across
+          # the archive boundary in a way `zip -r` doesn't.
+          ditto -c -k --keepParent --sequesterRsrc degu.app "../../degu-${TAG}-darwin-arm64.zip"
+          cd ../..
+          shasum -a 256 "degu-${TAG}-darwin-arm64.zip" > "degu-${TAG}-darwin-arm64.zip.sha256"
+          ls -la degu-${TAG}-*
+
+      - name: Build headless CLI
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          node scripts/build-embed.mjs
+          mkdir -p bin
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "bin/degu-cli-${{ steps.tag.outputs.tag }}-darwin-arm64" \
+            ./cmd/degu
+          shasum -a 256 "bin/degu-cli-${{ steps.tag.outputs.tag }}-darwin-arm64" \
+            > "bin/degu-cli-${{ steps.tag.outputs.tag }}-darwin-arm64.sha256"
+
+      - name: Create release
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          DEFAULT_BODY=$(cat <<EOF
+          # degu ${TAG}
+
+          ## macOS (Apple Silicon)
+          1. Download \`degu-${TAG}-darwin-arm64.zip\`.
+          2. Unzip; drag \`degu.app\` to /Applications.
+          3. First launch: right-click → **Open** (the .app is self-signed,
+             not notarized — Gatekeeper requires the explicit allow once).
+             Alternatively: \`xattr -dr com.apple.quarantine /Applications/degu.app\`.
+          4. degu opens to your ~/Pictures folder by default. Pass a path
+             via \`open -a degu --args /path/to/folder\` to scope it elsewhere.
+
+          ## Headless CLI
+          \`degu-cli-${TAG}-darwin-arm64\` is the no-window flavour for
+          SSH / "serve and open in any browser" use:
+          \`\`\`
+          chmod +x degu-cli-${TAG}-darwin-arm64
+          ./degu-cli-${TAG}-darwin-arm64 /path/to/folder
+          \`\`\`
+          EOF
+          )
+          BODY="${NOTES:-$DEFAULT_BODY}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "$BODY" \
+            "degu-${TAG}-darwin-arm64.zip" \
+            "degu-${TAG}-darwin-arm64.zip.sha256" \
+            "bin/degu-cli-${TAG}-darwin-arm64" \
+            "bin/degu-cli-${TAG}-darwin-arm64.sha256"

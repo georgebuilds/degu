@@ -1,0 +1,1416 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>degu — a media browser that lives with your media</title>
+    <meta name="description" content="degu lives next to your files. Drop it on a USB drive or external SSD; plug into another computer and your tags, loops, and thumbnails come along. Nothing in the cloud." />
+    <meta property="og:title" content="degu — a media browser that lives with your media" />
+    <meta property="og:description" content="Drop it on the drive. Plug into any computer — your tags, loops, and thumbnails travel with the media. Nothing leaves your machine." />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#0c1224" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --sky-0: #050715;
+        --sky-1: #0a0f24;
+        --sky-2: #131a36;
+        --horizon: #1a1714;
+        --bone: #efe7d7;
+        --muted: #8e8675;
+        --soft: #5a5448;
+        --accent: #d4a24c;
+        --accent-soft: rgba(212, 162, 76, 0.16);
+        --accent-line: rgba(212, 162, 76, 0.32);
+        --frame: rgba(239, 231, 215, 0.07);
+        --frame-strong: rgba(239, 231, 215, 0.18);
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+        background: var(--sky-0);
+        color: var(--bone);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      body {
+        position: relative;
+        min-height: 100vh;
+        background:
+          radial-gradient(ellipse 130% 55% at 50% 108%, var(--horizon) 0%, transparent 55%),
+          radial-gradient(ellipse 70% 45% at 80% 18%, rgba(64, 80, 160, 0.18), transparent 60%),
+          radial-gradient(ellipse 60% 40% at 18% 28%, rgba(140, 100, 180, 0.12), transparent 60%),
+          radial-gradient(ellipse 140% 90% at 50% -20%, var(--sky-2) 0%, var(--sky-1) 38%, var(--sky-0) 100%);
+      }
+
+      /* faint film grain so the dark sky has depth */
+      body::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+        background-image:
+          radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.012) 1px, transparent 1.5px),
+          radial-gradient(circle at 25% 75%, rgba(255, 255, 255, 0.012) 1px, transparent 1.5px);
+        background-size: 3px 3px, 5px 5px;
+        background-position: 0 0, 1px 2px;
+        mix-blend-mode: screen;
+        opacity: 0.6;
+      }
+
+      .stars {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1;
+      }
+      @keyframes twinkle {
+        0%,
+        100% {
+          opacity: var(--o, 0.7);
+        }
+        50% {
+          opacity: calc(var(--o, 0.7) * 0.25);
+        }
+      }
+      .stars circle {
+        animation: twinkle var(--d, 4s) ease-in-out infinite;
+        animation-delay: var(--delay, 0s);
+      }
+
+      /* shooting stars */
+      .shoot {
+        position: absolute;
+        top: 18%;
+        left: -10%;
+        width: 140px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(239, 231, 215, 0.85), transparent);
+        transform: rotate(15deg);
+        opacity: 0;
+        z-index: 1;
+        pointer-events: none;
+        animation: shoot 11s ease-in 4s infinite;
+      }
+      .shoot.b {
+        top: 9%;
+        left: -10%;
+        width: 100px;
+        animation-duration: 17s;
+        animation-delay: 13s;
+        transform: rotate(8deg);
+      }
+      @keyframes shoot {
+        0% {
+          transform: translate(0, 0) rotate(15deg);
+          opacity: 0;
+        }
+        4% {
+          opacity: 0.9;
+        }
+        12% {
+          transform: translate(60vw, 18vh) rotate(15deg);
+          opacity: 0;
+        }
+        100% {
+          transform: translate(60vw, 18vh) rotate(15deg);
+          opacity: 0;
+        }
+      }
+
+      .stage {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+        padding: clamp(18px, 3.5vh, 44px) clamp(20px, 4vw, 56px);
+        gap: clamp(14px, 2.5vh, 28px);
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 10px;
+        font-weight: 700;
+        font-size: clamp(20px, 2.6vh, 26px);
+        letter-spacing: -0.02em;
+      }
+      .brand .glyph {
+        color: var(--accent);
+      }
+      .brand-tag {
+        color: var(--soft);
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border: 1px solid var(--frame);
+        border-radius: 4px;
+      }
+
+      .links {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .link {
+        color: var(--muted);
+        text-decoration: none;
+        font-size: 12px;
+        padding: 7px 11px;
+        border-radius: 6px;
+        transition:
+          color 0.15s,
+          background 0.15s;
+      }
+      .link::before {
+        content: '> ';
+        color: var(--soft);
+      }
+      .link:hover {
+        color: var(--bone);
+        background: var(--frame);
+      }
+      .link:hover::before {
+        color: var(--accent);
+      }
+
+      .center {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: clamp(16px, 2.6vh, 28px);
+        text-align: center;
+        padding-bottom: clamp(180px, 38vh, 380px);
+      }
+
+      .badge {
+        font-size: 10.5px;
+        color: var(--accent);
+        letter-spacing: 0.26em;
+        text-transform: uppercase;
+        padding: 5px 14px;
+        border: 1px solid var(--accent-line);
+        border-radius: 99px;
+        background: var(--accent-soft);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .badge::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+      }
+
+      .lede {
+        font-size: clamp(13px, 2vh, 17px);
+        color: var(--bone);
+        max-width: 56ch;
+        line-height: 1.6;
+      }
+      .lede em {
+        color: var(--muted);
+        font-style: normal;
+      }
+      .lede .pipe {
+        color: var(--soft);
+        margin: 0 6px;
+      }
+
+      .terminal {
+        width: min(720px, 92vw);
+        background: rgba(5, 7, 21, 0.62);
+        border: 1px solid var(--frame-strong);
+        border-radius: 10px;
+        overflow: hidden;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        text-align: left;
+        box-shadow:
+          0 1px 0 rgba(255, 255, 255, 0.04) inset,
+          0 24px 60px -28px rgba(0, 0, 0, 0.8);
+      }
+      .terminal-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--frame);
+        background: rgba(0, 0, 0, 0.28);
+      }
+      .terminal-bar .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: rgba(239, 231, 215, 0.16);
+      }
+      .terminal-bar .label {
+        margin-left: 12px;
+        font-size: 10.5px;
+        color: var(--soft);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .terminal-body {
+        padding: clamp(14px, 2.4vh, 20px) clamp(14px, 2.4vw, 22px);
+        font-size: clamp(11.5px, 1.7vh, 14px);
+        line-height: 1.5;
+        white-space: nowrap;
+        overflow-x: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--frame-strong) transparent;
+      }
+      .terminal-body::-webkit-scrollbar {
+        height: 4px;
+      }
+      .terminal-body::-webkit-scrollbar-thumb {
+        background: var(--frame-strong);
+        border-radius: 2px;
+      }
+      .terminal-body code {
+        font-family: inherit;
+      }
+      .prompt {
+        color: var(--accent);
+        flex: 0 0 auto;
+      }
+      .cmd {
+        color: var(--bone);
+        flex: 1 1 auto;
+      }
+      .copy {
+        margin-left: auto;
+        color: var(--soft);
+        border: 1px solid var(--frame);
+        background: transparent;
+        cursor: pointer;
+        font: inherit;
+        font-size: 10.5px;
+        padding: 4px 9px;
+        border-radius: 5px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        flex: 0 0 auto;
+        transition:
+          color 0.12s,
+          background 0.12s,
+          border-color 0.12s;
+      }
+      .copy:hover {
+        color: var(--bone);
+        background: var(--frame);
+        border-color: var(--frame-strong);
+      }
+      .copy.copied {
+        color: var(--accent);
+        border-color: var(--accent-line);
+      }
+
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 11px 18px;
+        border-radius: 8px;
+        font: inherit;
+        font-size: 13px;
+        text-decoration: none;
+        transition: all 0.15s;
+        border: 1px solid var(--frame-strong);
+        color: var(--bone);
+        background: rgba(239, 231, 215, 0.04);
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: rgba(239, 231, 215, 0.1);
+        border-color: rgba(239, 231, 215, 0.32);
+        transform: translateY(-1px);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #1a1714;
+        border-color: var(--accent);
+        font-weight: 500;
+      }
+      .btn-primary:hover {
+        filter: brightness(1.08);
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .btn .arrow {
+        font-size: 14px;
+        transition: transform 0.18s;
+      }
+      .btn:hover .arrow {
+        transform: translateX(2px);
+      }
+      .btn-primary:hover .arrow {
+        transform: translateY(2px);
+      }
+
+      .footnote {
+        font-size: 11px;
+        color: var(--soft);
+        letter-spacing: 0.04em;
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .footnote .sep {
+        color: rgba(239, 231, 215, 0.18);
+      }
+      .footnote a {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dotted var(--soft);
+        transition: color 0.15s;
+      }
+      .footnote a:hover {
+        color: var(--bone);
+      }
+
+      /* ===== Burroughs (pinned bottom) ===== */
+      .ground-glow {
+        position: absolute;
+        left: 50%;
+        bottom: -14%;
+        width: clamp(360px, 70vh, 820px);
+        height: clamp(80px, 18vh, 160px);
+        transform: translateX(-50%);
+        background: radial-gradient(
+          ellipse at center,
+          rgba(212, 162, 76, 0.14),
+          rgba(212, 162, 76, 0.04) 45%,
+          transparent 70%
+        );
+        filter: blur(14px);
+        z-index: 1;
+        pointer-events: none;
+        opacity: 0;
+        animation: glow-rise 1.4s 0.3s cubic-bezier(0.22, 0.9, 0.25, 1) forwards;
+      }
+      @keyframes glow-rise {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      .burroughs-wrap {
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        transform: translateX(-50%);
+        height: clamp(190px, 38vh, 380px);
+        aspect-ratio: 220 / 240;
+        z-index: 2;
+        pointer-events: none;
+      }
+      .burroughs {
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+        filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.5))
+          drop-shadow(0 -2px 16px rgba(212, 162, 76, 0.08));
+      }
+      .burroughs > * {
+        transform-box: fill-box;
+        transform-origin: center;
+        will-change: transform, opacity;
+      }
+
+      /* ===== Install builder ===== */
+      .install {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: clamp(8px, 1.4vh, 14px);
+        width: min(720px, 92vw);
+      }
+      .detect-line {
+        font-size: 10px;
+        letter-spacing: 0.22em;
+        color: var(--soft);
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .detect-line .arrow {
+        color: var(--accent);
+      }
+      .detect-line .seg {
+        color: var(--bone);
+      }
+      .detect-line .sep {
+        color: rgba(239, 231, 215, 0.18);
+      }
+      .tiles {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .tile {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 9px 15px;
+        border: 1px solid var(--frame);
+        background: rgba(5, 7, 21, 0.4);
+        font-family: inherit;
+        font-size: 10.5px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--muted);
+        cursor: pointer;
+        border-radius: 4px;
+        transition:
+          color 0.15s,
+          background 0.15s,
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      .tile:hover:not([data-soon]) {
+        color: var(--bone);
+        border-color: var(--frame-strong);
+        background: rgba(5, 7, 21, 0.65);
+      }
+      .tile.is-active {
+        color: var(--accent);
+        border-color: var(--accent-line);
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent-line);
+      }
+      .tile .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--soft);
+      }
+      .tile.is-active .dot {
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+      }
+      .tile[data-soon] {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      .tile[data-soon]:hover {
+        color: var(--muted);
+      }
+      .tile .soon-tag,
+      .tile .new-tag {
+        display: inline;
+        font-size: 8.5px;
+        letter-spacing: 0.16em;
+        color: var(--accent);
+        opacity: 0.85;
+      }
+      .tile.is-active .new-tag {
+        opacity: 1;
+      }
+      .tool-toggle {
+        margin-left: auto;
+        display: inline-flex;
+        border: 1px solid var(--frame);
+        border-radius: 4px;
+        overflow: hidden;
+        font-size: 9.5px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+      .tool-toggle button {
+        padding: 3px 9px;
+        background: transparent;
+        border: 0;
+        border-left: 1px solid var(--frame);
+        color: var(--soft);
+        font: inherit;
+        cursor: pointer;
+        transition:
+          color 0.12s,
+          background 0.12s;
+      }
+      .tool-toggle button:first-child {
+        border-left: 0;
+      }
+      .tool-toggle button.is-active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .tool-toggle button:hover:not(.is-active) {
+        color: var(--bone);
+        background: var(--frame);
+      }
+      .verify {
+        font-size: 11px;
+        color: var(--soft);
+        text-decoration: none;
+        letter-spacing: 0.04em;
+        border-bottom: 1px dotted var(--frame-strong);
+        padding-bottom: 1px;
+        transition: color 0.15s;
+        align-self: center;
+      }
+      .verify:hover {
+        color: var(--accent);
+      }
+      .verify::before {
+        content: '↗ ';
+        color: var(--accent);
+      }
+      @keyframes cmd-swap {
+        0% {
+          opacity: 0.35;
+          transform: translateX(-3px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .cmd.swapping {
+        animation: cmd-swap 200ms cubic-bezier(0.22, 0.9, 0.25, 1);
+      }
+
+      @media (max-height: 620px) {
+        .center {
+          gap: 12px;
+          padding-bottom: clamp(160px, 36vh, 280px);
+        }
+        .lede {
+          font-size: 12.5px;
+        }
+        .badge {
+          letter-spacing: 0.2em;
+        }
+      }
+      @media (max-height: 480px) {
+        .lede,
+        .footnote {
+          display: none;
+        }
+        .burroughs-wrap {
+          height: 36vh;
+        }
+      }
+      @media (max-width: 520px) {
+        .links {
+          gap: 0;
+        }
+        .link {
+          padding: 7px 8px;
+          font-size: 11px;
+        }
+        .brand-tag {
+          display: none;
+        }
+        .terminal-body {
+          font-size: 11px;
+        }
+      }
+      @media (max-width: 380px) {
+        .links {
+          display: none;
+        }
+        .top {
+          justify-content: center;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .stars circle,
+        .shoot,
+        .ground-glow {
+          animation: none !important;
+        }
+        .ground-glow {
+          opacity: 1;
+        }
+        .burroughs > * {
+          transition: none !important;
+          transform: none !important;
+          opacity: 1 !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <svg class="stars" preserveAspectRatio="none" viewBox="0 0 100 100" aria-hidden="true"></svg>
+    <span class="shoot" aria-hidden="true"></span>
+    <span class="shoot b" aria-hidden="true"></span>
+    <div class="ground-glow" aria-hidden="true"></div>
+
+    <div class="stage">
+      <header class="top">
+        <div class="brand">
+          <span>degu<span class="glyph">.</span></span>
+          <span class="brand-tag">v0.1 · agpl-3.0</span>
+        </div>
+        <nav class="links" aria-label="primary">
+          <a class="link" href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">source</a>
+          <a class="link" href="https://github.com/georgebuilds/degu/releases" target="_blank" rel="noopener">releases</a>
+          <a class="link" href="https://github.com/georgebuilds/degu/blob/main/README.md" target="_blank" rel="noopener">readme</a>
+        </nav>
+      </header>
+
+      <main class="center">
+        <span class="badge">lives with your media · drop on the drive · no cloud</span>
+
+        <p class="lede">
+          a media browser that travels with your files.<br />
+          <em
+            >keep it on the drive — usb, external ssd, anywhere<span class="pipe">·</span>plug into another computer<span class="pipe">·</span>your tags, loops, and thumbnails come along.</em
+          >
+        </p>
+
+        <div class="install">
+          <div class="detect-line" id="detect-line">
+            <span class="arrow">&gt;</span>
+            <span>target:</span>
+            <span class="seg" id="status-target">macos</span>
+            <span class="sep">·</span>
+            <span class="seg" id="status-detail">arm64</span>
+            <span class="sep">·</span>
+            <span>tool:</span>
+            <span class="seg" id="status-tool">curl</span>
+          </div>
+
+          <div class="tiles" role="tablist" aria-label="install platform">
+            <button
+              class="tile is-active"
+              data-platform="mac"
+              role="tab"
+              aria-selected="true"
+              type="button"
+            >
+              <span class="dot" aria-hidden="true"></span>macos
+            </button>
+            <button
+              class="tile"
+              data-platform="linux"
+              data-soon
+              role="tab"
+              aria-selected="false"
+              aria-disabled="true"
+              type="button"
+            >
+              <span class="dot" aria-hidden="true"></span>linux<span class="soon-tag">// soon</span>
+            </button>
+            <button
+              class="tile"
+              data-platform="windows"
+              data-soon
+              role="tab"
+              aria-selected="false"
+              aria-disabled="true"
+              type="button"
+            >
+              <span class="dot" aria-hidden="true"></span>windows<span class="soon-tag">// soon</span>
+            </button>
+            <button
+              class="tile"
+              data-platform="web"
+              role="tab"
+              aria-selected="false"
+              type="button"
+            >
+              <span class="dot" aria-hidden="true"></span>web<span class="new-tag">· 1 file</span>
+            </button>
+          </div>
+
+          <div class="terminal" role="region" aria-label="install command">
+            <div class="terminal-bar">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              <span class="label">~ install</span>
+              <div class="tool-toggle" id="tool-toggle" role="tablist" aria-label="install tool">
+                <button data-tool="curl" class="is-active" type="button" aria-selected="true">curl</button>
+                <button data-tool="wget" type="button" aria-selected="false">wget</button>
+              </div>
+            </div>
+            <div class="terminal-body">
+              <span class="prompt">$</span>
+              <code class="cmd" id="cmd"
+                >curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh</code
+              >
+              <button class="copy" id="copy" type="button" aria-label="copy command">copy</button>
+            </div>
+          </div>
+
+          <a
+            class="verify"
+            id="verify-link"
+            href="https://georgebuilds.github.io/degu/install.sh"
+            target="_blank"
+            rel="noopener"
+          >inspect install.sh before running</a>
+        </div>
+
+        <div class="actions">
+          <a
+            class="btn btn-primary"
+            id="primary-action"
+            href="https://github.com/georgebuilds/degu/releases/latest"
+            target="_blank"
+            rel="noopener"
+          >
+            <span class="arrow">↓</span> <span id="primary-label">download degu.app</span>
+          </a>
+          <a class="btn" href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">
+            <span class="arrow">↗</span> view source
+          </a>
+        </div>
+
+        <div class="footnote">
+          <span>tags + loops live in <code>index.json</code> next to your media</span>
+          <span class="sep">·</span>
+          <span
+            ><a href="https://github.com/georgebuilds/degu/blob/main/LICENSE" target="_blank" rel="noopener">agpl-3.0</a></span
+          >
+        </div>
+      </main>
+    </div>
+
+    <div class="burroughs-wrap" aria-hidden="false">
+      <svg
+        class="burroughs"
+        viewBox="0 0 220 240"
+        xmlns="http://www.w3.org/2000/svg"
+        role="img"
+        aria-label="Burroughs the degu, mascot"
+      >
+        <ellipse cx="110" cy="232" rx="60" ry="3" fill="#1a1714" opacity="0.35" />
+
+        <path d="M 35 232 L 42 158 L 60 134 L 88 124 L 95 145 L 95 232 Z" fill="#6b7a5e" />
+        <path d="M 185 232 L 178 158 L 160 134 L 132 124 L 125 145 L 125 232 Z" fill="#6b7a5e" />
+
+        <path d="M 42 158 L 60 134 L 88 124 L 80 162 L 50 188 Z" fill="#4a5440" />
+        <path d="M 178 158 L 160 134 L 132 124 L 140 162 L 170 188 Z" fill="#4a5440" />
+
+        <path d="M 50 188 L 80 162 L 78 196 L 56 210 Z" fill="#5a6b50" />
+        <path d="M 170 188 L 140 162 L 142 196 L 164 210 Z" fill="#5a6b50" />
+
+        <path d="M 60 134 L 78 138 L 80 162 L 64 158 Z" fill="#5a6b50" />
+        <path d="M 160 134 L 142 138 L 140 162 L 156 158 Z" fill="#5a6b50" />
+
+        <path d="M 52 168 L 64 160 L 70 178 L 58 188 Z" fill="#3a4030" />
+        <path d="M 78 200 L 90 196 L 92 218 L 80 222 Z" fill="#8a8268" />
+        <path d="M 42 210 L 54 204 L 60 222 L 48 228 Z" fill="#3a4030" />
+        <path d="M 70 144 L 80 142 L 82 154 L 72 156 Z" fill="#8a8268" />
+        <path d="M 60 184 L 68 180 L 70 192 L 62 196 Z" fill="#5a6b50" />
+        <path d="M 90 168 L 88 158 L 92 156 L 94 168 Z" fill="#3a4030" />
+
+        <path d="M 168 168 L 156 160 L 150 178 L 162 188 Z" fill="#3a4030" />
+        <path d="M 142 200 L 130 196 L 128 218 L 140 222 Z" fill="#8a8268" />
+        <path d="M 178 210 L 166 204 L 160 222 L 172 228 Z" fill="#3a4030" />
+        <path d="M 150 144 L 140 142 L 138 154 L 148 156 Z" fill="#8a8268" />
+        <path d="M 160 184 L 152 180 L 150 192 L 158 196 Z" fill="#5a6b50" />
+        <path d="M 130 168 L 132 158 L 128 156 L 126 168 Z" fill="#3a4030" />
+
+        <path d="M 95 145 L 110 165 L 125 145 L 125 232 L 95 232 Z" fill="#7a5e44" />
+        <path d="M 95 145 L 110 165 L 125 145 L 125 175 L 110 195 L 95 175 Z" fill="#8c6f55" />
+
+        <path d="M 86 124 L 134 124 L 136 134 L 84 134 Z" fill="#6e2424" />
+
+        <path d="M 96 124 L 100 118 L 104 124 Z" fill="#9c8068" />
+        <path d="M 116 124 L 120 118 L 124 124 Z" fill="#9c8068" />
+
+        <path d="M 96 144 L 124 144 L 130 168 L 110 184 L 90 168 Z" fill="#7e2e2e" />
+        <path d="M 96 144 L 110 158 L 108 172 L 90 168 Z" fill="#8a3a3a" />
+        <path d="M 124 144 L 110 158 L 112 172 L 130 168 Z" fill="#5e1c1c" />
+        <path d="M 100 148 L 106 156 L 102 164 L 96 156 Z" fill="#6e2424" />
+        <path d="M 120 148 L 114 156 L 118 164 L 124 156 Z" fill="#a04848" opacity="0.6" />
+
+        <path d="M 100 156 L 120 156 L 122 170 L 110 178 L 98 170 Z" fill="#8a3a3a" />
+        <path d="M 100 156 L 110 162 L 120 156 L 116 168 L 110 172 L 104 168 Z" fill="#6e2424" />
+        <path d="M 102 158 L 110 162 L 106 166 Z" fill="#a04848" />
+        <path d="M 116 158 L 118 164 L 114 166 Z" fill="#a04848" opacity="0.5" />
+
+        <path d="M 104 174 L 100 200 L 95 196 L 98 172 Z" fill="#7e2e2e" />
+        <path d="M 116 174 L 120 200 L 125 196 L 122 172 Z" fill="#5e1c1c" />
+        <path d="M 104 174 L 102 188 L 99 184 L 100 174 Z" fill="#8a3a3a" />
+        <path d="M 100 200 L 95 196 L 96 200 Z" fill="#5e1c1c" />
+        <path d="M 120 200 L 125 196 L 124 200 Z" fill="#7e2e2e" />
+
+        <path d="M 125 145 L 132 124 L 152 110 L 148 138 L 138 156 Z" fill="#5a6b50" />
+        <path d="M 125 145 L 132 124 L 138 132 L 134 144 Z" fill="#3a4030" />
+        <path d="M 125 145 L 138 132 L 138 156 L 130 152 Z" fill="#4a5440" />
+
+        <path d="M 95 145 L 88 124 L 68 110 L 72 138 L 82 156 Z" fill="#5a6b50" />
+        <path d="M 95 145 L 88 124 L 82 132 L 86 144 Z" fill="#3a4030" />
+        <path d="M 95 145 L 82 132 L 82 156 L 90 152 Z" fill="#4a5440" />
+
+        <path d="M 76 132 L 96 132 L 96 142 L 76 142 Z" fill="#3a2e18" opacity="0.6" />
+        <path
+          d="M 79 138 L 86 130 L 93 138"
+          fill="none"
+          stroke="#d4a24c"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <path d="M 86 130 L 88 132 L 84 132 Z" fill="#dead60" />
+
+        <line x1="68" y1="110" x2="60" y2="134" stroke="#3a4030" stroke-width="1" opacity="0.5" />
+        <line x1="152" y1="110" x2="160" y2="134" stroke="#3a4030" stroke-width="1" opacity="0.5" />
+        <path d="M 60 134 L 68 128 L 72 138 L 64 142 Z" fill="#5a6b50" />
+        <path d="M 160 134 L 152 128 L 148 138 L 156 142 Z" fill="#5a6b50" />
+
+        <path d="M 96 124 L 100 110 L 120 110 L 124 124 L 110 130 Z" fill="#9c8068" />
+        <path d="M 100 110 L 120 110 L 122 116 L 98 116 Z" fill="#7a624c" />
+        <path d="M 96 124 L 110 130 L 124 124 L 120 128 L 100 128 Z" fill="#7a624c" />
+        <path d="M 96 124 L 100 110 L 102 116 L 98 124 Z" fill="#7a624c" />
+        <path d="M 124 124 L 120 110 L 118 116 L 122 124 Z" fill="#7a624c" />
+
+        <path
+          d="M 70 88 L 78 50 L 100 36 L 130 38 L 148 56 L 152 92 L 142 116 L 110 124 L 80 116 Z"
+          fill="#a89078"
+        />
+
+        <path d="M 78 50 L 100 36 L 130 38 L 148 56 L 142 64 L 110 56 L 84 62 Z" fill="#b89a7e" />
+
+        <path
+          d="M 84 62 L 96 60 L 110 56 L 124 60 L 138 64 L 134 76 L 110 80 L 88 76 Z"
+          fill="#c4a888"
+        />
+        <path d="M 100 62 L 110 58 L 120 62 L 116 74 L 110 76 L 104 74 Z" fill="#d4b898" />
+        <path d="M 84 62 L 92 64 L 90 76 L 88 76 Z" fill="#a89078" />
+        <path d="M 138 64 L 130 64 L 130 76 L 134 76 Z" fill="#a89078" />
+
+        <path d="M 88 76 L 110 80 L 138 78 L 134 90 L 110 90 L 92 88 Z" fill="#7a624c" />
+
+        <path d="M 70 88 L 78 50 L 84 62 L 80 90 Z" fill="#8c7560" />
+        <path d="M 152 92 L 148 56 L 142 64 L 144 92 Z" fill="#8c7560" />
+        <path d="M 70 88 L 80 90 L 80 116 Z" fill="#7a624c" />
+        <path d="M 152 92 L 144 92 L 142 116 Z" fill="#7a624c" />
+
+        <path d="M 82 96 L 90 92 L 96 100 L 92 104 L 86 102 Z" fill="#c4a888" />
+        <path d="M 138 96 L 130 92 L 124 100 L 128 104 L 134 102 Z" fill="#c4a888" />
+
+        <path d="M 80 116 L 84 96 L 95 100 L 90 110 L 85 116 Z" fill="#8c7560" />
+        <path d="M 142 116 L 138 96 L 127 100 L 132 110 L 137 116 Z" fill="#8c7560" />
+        <path d="M 85 116 L 90 110 L 95 118 L 92 122 Z" fill="#7a624c" />
+        <path d="M 137 116 L 132 110 L 127 118 L 130 122 Z" fill="#7a624c" />
+
+        <path d="M 92 122 L 100 124 L 98 130 L 90 126 Z" fill="#5e4634" />
+        <path d="M 130 122 L 122 124 L 124 130 L 132 126 Z" fill="#5e4634" />
+
+        <path d="M 78 86 L 92 80 L 102 86 L 100 96 L 86 98 L 78 92 Z" fill="#5a4636" />
+        <path d="M 118 86 L 130 80 L 142 86 L 140 92 L 132 98 L 118 96 Z" fill="#5a4636" />
+        <path d="M 84 88 L 92 84 L 100 88 L 96 94 L 88 94 Z" fill="#3a2820" />
+        <path d="M 120 88 L 130 84 L 138 88 L 134 94 L 124 94 Z" fill="#3a2820" />
+
+        <path d="M 80 96 L 88 100 L 100 96 L 98 104 L 86 106 L 80 102 Z" fill="#7a5840" />
+        <path d="M 84 102 L 92 105 L 98 102 L 96 105 L 88 107 L 84 104 Z" fill="#5e4634" />
+        <path d="M 120 96 L 132 100 L 140 96 L 138 102 L 130 106 L 120 104 Z" fill="#7a5840" />
+        <path d="M 122 102 L 130 105 L 136 102 L 134 105 L 130 107 L 124 104 Z" fill="#5e4634" />
+
+        <path
+          d="M 80 80 Q 88 74 100 82"
+          fill="none"
+          stroke="#1a1714"
+          stroke-width="4"
+          stroke-linecap="round"
+        />
+        <ellipse cx="92" cy="89" rx="2.6" ry="3" fill="#1a1714" />
+        <circle cx="93" cy="88" r="0.8" fill="#efe7d7" />
+        <path
+          d="M 84 95 Q 92 97 100 93"
+          fill="none"
+          stroke="#3a332c"
+          stroke-width="0.9"
+          opacity="0.7"
+        />
+
+        <path
+          d="M 120 82 Q 132 74 140 80"
+          fill="none"
+          stroke="#1a1714"
+          stroke-width="4"
+          stroke-linecap="round"
+        />
+        <ellipse cx="128" cy="89" rx="2.6" ry="3" fill="#1a1714" />
+        <circle cx="129" cy="88" r="0.8" fill="#efe7d7" />
+        <path
+          d="M 120 95 Q 130 97 140 93"
+          fill="none"
+          stroke="#3a332c"
+          stroke-width="0.9"
+          opacity="0.7"
+        />
+
+        <line
+          x1="123"
+          y1="74"
+          x2="135"
+          y2="68"
+          stroke="#5a3025"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          opacity="0.85"
+        />
+        <line
+          x1="123"
+          y1="74"
+          x2="135"
+          y2="68"
+          stroke="#a08068"
+          stroke-width="0.6"
+          stroke-linecap="round"
+          opacity="0.7"
+        />
+
+        <path d="M 100 90 L 110 92 L 120 90 L 118 100 L 110 102 L 102 100 Z" fill="#c4a888" />
+        <path d="M 108 92 L 112 92 L 111 102 L 109 102 Z" fill="#d4b898" />
+        <path d="M 100 90 L 108 92 L 106 100 L 102 100 Z" fill="#b89a7e" />
+        <path d="M 120 90 L 112 92 L 114 100 L 118 100 Z" fill="#b89a7e" />
+
+        <path d="M 90 100 L 100 100 L 102 122 L 92 122 Z" fill="#b89a7e" />
+        <path d="M 120 100 L 130 100 L 128 122 L 118 122 Z" fill="#b89a7e" />
+        <path d="M 100 100 L 120 100 L 120 118 L 110 124 L 100 118 Z" fill="#cab094" />
+        <path d="M 92 122 L 102 122 L 110 130 L 102 128 L 92 124 Z" fill="#9c8068" />
+        <path d="M 128 122 L 118 122 L 110 130 L 118 128 L 128 124 Z" fill="#9c8068" />
+
+        <path d="M 109 118 L 111 118 L 110 124 Z" fill="#9c8068" />
+
+        <path d="M 100 128 L 120 128 L 118 134 L 102 134 Z" fill="#7a624c" />
+        <path d="M 102 134 L 118 134 L 114 138 L 106 138 Z" fill="#5e4634" />
+
+        <path d="M 78 50 L 84 22 L 96 50 Z" fill="#7a624c" />
+        <path d="M 82 48 L 86 32 L 92 48 Z" fill="#5a4636" />
+        <path d="M 84 22 L 86 32 L 82 48 L 78 50 Z" fill="#9c8068" />
+        <path d="M 84 22 L 87 28 L 84 32 Z" fill="#c4a888" />
+
+        <path d="M 130 38 L 124 14 L 116 40 Z" fill="#7a624c" />
+        <path d="M 126 36 L 122 22 L 118 36 Z" fill="#5a4636" />
+        <path d="M 124 14 L 122 22 L 130 38 L 128 32 Z" fill="#9c8068" />
+        <path d="M 124 14 L 126 20 L 124 24 Z" fill="#c4a888" />
+        <path d="M 124 14 L 120 18 L 122 22 L 124 20 Z" fill="#a89078" />
+
+        <path d="M 100 105 L 110 108 L 120 105 L 116 114 L 110 118 L 104 114 Z" fill="#1a1714" />
+        <path d="M 104 114 L 116 114 L 113 117 L 107 117 Z" fill="#3a332c" />
+        <path d="M 108 108 L 112 108 L 111 112 L 109 112 Z" fill="#3a332c" />
+
+        <path
+          d="M 100 124 L 108 124"
+          stroke="#1a1714"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          fill="none"
+        />
+
+        <line
+          x1="116"
+          y1="125"
+          x2="148"
+          y2="135"
+          stroke="#efe7d7"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+        <line
+          x1="116"
+          y1="125"
+          x2="124"
+          y2="127.5"
+          stroke="#c9a880"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+        <line
+          x1="120"
+          y1="126.2"
+          x2="124"
+          y2="127.3"
+          stroke="#9c8060"
+          stroke-width="3"
+          stroke-linecap="round"
+        />
+        <line
+          x1="138"
+          y1="132"
+          x2="144"
+          y2="133.5"
+          stroke="#a89e8a"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          opacity="0.6"
+        />
+        <circle cx="148" cy="135" r="2" fill="#c9774e" />
+        <circle cx="148" cy="135" r="0.9" fill="#efe7d7" opacity="0.7" />
+
+        <path
+          d="M 148 132 Q 158 118 152 100 Q 144 84 158 70 Q 170 56 162 38"
+          fill="none"
+          stroke="#a89e8a"
+          stroke-width="1.6"
+          stroke-linecap="round"
+          opacity="0.5"
+        />
+        <path
+          d="M 148 132 Q 154 124 153 114"
+          fill="none"
+          stroke="#a89e8a"
+          stroke-width="0.9"
+          stroke-linecap="round"
+          opacity="0.32"
+        />
+        <path
+          d="M 152 100 Q 160 96 162 88"
+          fill="none"
+          stroke="#a89e8a"
+          stroke-width="0.7"
+          stroke-linecap="round"
+          opacity="0.25"
+        />
+        <path
+          d="M 156 76 Q 164 64 160 50"
+          fill="none"
+          stroke="#a89e8a"
+          stroke-width="0.6"
+          stroke-linecap="round"
+          opacity="0.22"
+        />
+
+        <line x1="86" y1="118" x2="68" y2="116" stroke="#3a332c" stroke-width="0.9" />
+        <line x1="86" y1="121" x2="68" y2="123" stroke="#3a332c" stroke-width="0.9" />
+        <line x1="88" y1="124" x2="72" y2="128" stroke="#3a332c" stroke-width="0.7" opacity="0.7" />
+
+        <path
+          d="M 96 110 Q 100 116 100 122"
+          fill="none"
+          stroke="#7a624c"
+          stroke-width="0.6"
+          opacity="0.5"
+        />
+        <path
+          d="M 124 110 Q 120 116 120 122"
+          fill="none"
+          stroke="#7a624c"
+          stroke-width="0.6"
+          opacity="0.5"
+        />
+      </svg>
+    </div>
+
+    <script>
+      // ===== STARS =====
+      (() => {
+        const sky = document.querySelector('.stars');
+        const SVGNS = 'http://www.w3.org/2000/svg';
+        const N = 110;
+        for (let i = 0; i < N; i++) {
+          const c = document.createElementNS(SVGNS, 'circle');
+          const x = Math.random() * 100;
+          // bias toward upper portion of sky (avoid Burroughs zone)
+          const y = Math.pow(Math.random(), 1.7) * 72;
+          const big = Math.random() < 0.06;
+          const r = big ? 0.45 + Math.random() * 0.35 : 0.14 + Math.random() * 0.3;
+          const o = (0.28 + Math.random() * 0.65).toFixed(2);
+          c.setAttribute('cx', x.toFixed(2));
+          c.setAttribute('cy', y.toFixed(2));
+          c.setAttribute('r', r.toFixed(3));
+          c.setAttribute('fill', big ? '#ffeed0' : '#efe7d7');
+          c.setAttribute('opacity', o);
+          c.style.setProperty('--o', o);
+          c.style.setProperty('--d', (3 + Math.random() * 5).toFixed(2) + 's');
+          c.style.setProperty('--delay', (Math.random() * -8).toFixed(2) + 's');
+          sky.appendChild(c);
+        }
+      })();
+
+      // ===== BURROUGHS ASSEMBLY =====
+      (() => {
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const svg = document.querySelector('.burroughs');
+        const pieces = Array.from(svg.children);
+        if (reduced) return;
+
+        // Scatter immediately (synchronous, before paint)
+        const seed = pieces.length;
+        pieces.forEach((p, i) => {
+          // Distribute angles on a spiral so pieces flow in from all directions
+          const baseAngle = (i / seed) * Math.PI * 2 * 1.3 + Math.random() * 0.6;
+          const dist = 540 + Math.random() * 360;
+          const dx = Math.cos(baseAngle) * dist;
+          const dy = Math.sin(baseAngle) * dist - 60; // slight upward bias
+          const rot = (Math.random() - 0.5) * 540 + (i % 2 ? 180 : -180);
+          p.style.transition = 'none';
+          p.style.transform =
+            'translate(' +
+            dx.toFixed(0) +
+            'px, ' +
+            dy.toFixed(0) +
+            'px) rotate(' +
+            rot.toFixed(0) +
+            'deg) scale(0.3)';
+          p.style.opacity = '0';
+        });
+
+        // Force layout flush, then animate to rest
+        void svg.getBoundingClientRect();
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // bottom-to-top order: clothing first, head/details last → "assembles upward"
+            const order = pieces
+              .map((p, i) => ({ p, i, y: p.getBBox ? safeBBox(p).y : i }))
+              .sort((a, b) => b.y - a.y); // larger y (lower in svg) first
+
+            const total = pieces.length;
+            order.forEach((entry, k) => {
+              const stagger = (k / total) * 320; // total stagger ≤ 320ms
+              const dur = 720; // transition duration ≤ 720ms
+              entry.p.style.transition =
+                'transform ' +
+                dur +
+                'ms cubic-bezier(0.22, 0.9, 0.25, 1) ' +
+                stagger.toFixed(0) +
+                'ms, opacity 360ms ease-out ' +
+                stagger.toFixed(0) +
+                'ms';
+              entry.p.style.transform = '';
+              entry.p.style.opacity = '';
+            });
+          });
+        });
+
+        function safeBBox(el) {
+          try {
+            return el.getBBox();
+          } catch {
+            return { y: 0 };
+          }
+        }
+      })();
+
+      // ===== INSTALL BUILDER =====
+      (() => {
+        const COMMANDS = {
+          mac: {
+            curl: 'curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh',
+            wget: 'wget -qO- https://georgebuilds.github.io/degu/install.sh | sh',
+          },
+          web: {
+            curl: 'curl -fsSL https://georgebuilds.github.io/degu/degu.html -o degu.html',
+          },
+        };
+        const TOOLS = {
+          mac: ['curl', 'wget'],
+          web: ['curl'],
+        };
+        const STATUS = {
+          mac: { target: 'macos', detail: 'arm64' },
+          web: { target: 'web', detail: '1 file · any chromium' },
+        };
+        const PRIMARY = {
+          mac: {
+            label: 'download degu.app',
+            href: 'https://github.com/georgebuilds/degu/releases/latest',
+            target: '_blank',
+          },
+          web: {
+            label: 'download degu.html',
+            href: 'https://georgebuilds.github.io/degu/degu.html',
+            target: '_self',
+          },
+        };
+        const VERIFY = {
+          mac: {
+            label: 'inspect install.sh before running',
+            href: 'https://georgebuilds.github.io/degu/install.sh',
+            visible: true,
+          },
+          web: {
+            label: '',
+            href: '',
+            visible: false,
+          },
+        };
+
+        const tilesEl = document.querySelector('.tiles');
+        const tiles = Array.from(tilesEl.querySelectorAll('.tile'));
+        const toolToggle = document.getElementById('tool-toggle');
+        const toolButtons = Array.from(toolToggle.querySelectorAll('button'));
+        const cmdEl = document.getElementById('cmd');
+        const statusTarget = document.getElementById('status-target');
+        const statusDetail = document.getElementById('status-detail');
+        const statusTool = document.getElementById('status-tool');
+        const primaryAction = document.getElementById('primary-action');
+        const primaryLabel = document.getElementById('primary-label');
+        const verifyLink = document.getElementById('verify-link');
+
+        let platform = 'mac';
+        let tool = 'curl';
+
+        function detectPlatform() {
+          const ua = navigator.userAgent || '';
+          const data = navigator.userAgentData;
+          let p = '';
+          if (data && data.platform) p = data.platform.toLowerCase();
+          else p = ua.toLowerCase();
+          if (p.includes('mac') || p.includes('darwin')) return 'mac';
+          // linux/windows builds aren't shipping yet; default to web for them
+          return 'web';
+        }
+
+        function setTool(next, animate) {
+          if (!TOOLS[platform].includes(next)) next = TOOLS[platform][0];
+          tool = next;
+          toolButtons.forEach((b) => {
+            const active = b.dataset.tool === tool;
+            b.classList.toggle('is-active', active);
+            b.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          render(animate);
+        }
+
+        function setPlatform(next, animate) {
+          if (!COMMANDS[next]) return;
+          platform = next;
+          tiles.forEach((t) => {
+            const active = t.dataset.platform === platform;
+            t.classList.toggle('is-active', active);
+            t.setAttribute('aria-selected', active ? 'true' : 'false');
+          });
+          // valid tool for new platform
+          if (!TOOLS[platform].includes(tool)) tool = TOOLS[platform][0];
+          // tool toggle visibility — hide when there's only one option
+          const showToggle = TOOLS[platform].length > 1;
+          toolToggle.style.display = showToggle ? '' : 'none';
+          if (showToggle) {
+            toolButtons.forEach((b) => {
+              const visible = TOOLS[platform].includes(b.dataset.tool);
+              b.style.display = visible ? '' : 'none';
+              const active = b.dataset.tool === tool;
+              b.classList.toggle('is-active', active);
+              b.setAttribute('aria-selected', active ? 'true' : 'false');
+            });
+          }
+          render(animate);
+        }
+
+        function render(animate) {
+          const cmd = COMMANDS[platform][tool];
+          if (animate) {
+            cmdEl.classList.remove('swapping');
+            // force reflow so the animation re-fires
+            void cmdEl.offsetWidth;
+            cmdEl.classList.add('swapping');
+          }
+          cmdEl.textContent = cmd;
+
+          const status = STATUS[platform];
+          statusTarget.textContent = status.target;
+          statusDetail.textContent = status.detail;
+          statusTool.textContent = tool;
+
+          const primary = PRIMARY[platform];
+          primaryAction.href = primary.href;
+          primaryAction.target = primary.target;
+          primaryLabel.textContent = primary.label;
+
+          const verify = VERIFY[platform];
+          if (verify.visible) {
+            verifyLink.style.display = '';
+            verifyLink.href = verify.href;
+            verifyLink.textContent = verify.label;
+          } else {
+            verifyLink.style.display = 'none';
+          }
+        }
+
+        // Tile clicks
+        tiles.forEach((t) => {
+          t.addEventListener('click', () => {
+            if (t.hasAttribute('data-soon')) return;
+            const next = t.dataset.platform;
+            if (next === platform) return;
+            setPlatform(next, true);
+          });
+        });
+
+        // Tool toggle clicks
+        toolButtons.forEach((b) => {
+          b.addEventListener('click', () => {
+            const next = b.dataset.tool;
+            if (next === tool) return;
+            setTool(next, true);
+          });
+        });
+
+        // Auto-detect and apply on load
+        const detected = detectPlatform();
+        setPlatform(detected, false);
+
+        // ===== COPY =====
+        const copyBtn = document.getElementById('copy');
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(cmdEl.textContent.trim());
+            const prev = copyBtn.textContent;
+            copyBtn.textContent = '✓ copied';
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+              copyBtn.textContent = prev;
+              copyBtn.classList.remove('copied');
+            }, 1600);
+          } catch {
+            copyBtn.textContent = '⚠ failed';
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

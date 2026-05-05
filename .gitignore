@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Go binaries
+bin/
+
+# Embedded frontend bundle — populated by `make build`, not tracked.
+internal/server/static/index.html
+
+# Wails build outputs and auto-generated JS bindings
+build/bin/
+frontend/
+
+# Runtime SQLite store written next to whatever folder degu is rooted at.
+degu.db
+degu.db-shm
+degu.db-wal
+degu.db-journal
+
+# Claude Code agent state (worktrees, local settings, preview launch config)
+.claude/

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "degu",
+  "outputfilename": "degu",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build:embed",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "degu",
+    "productName": "degu",
+    "productVersion": "0.1.0",
+    "copyright": "AGPL-3.0",
+    "comments": "local-first media browser"
+  },
+  "author": {
+    "name": "georgebuilds",
+    "email": ""
+  }
+}

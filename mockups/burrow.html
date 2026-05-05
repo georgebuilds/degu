@@ -1,0 +1,1379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Degu — Burrow concept</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #1a1714;
+        --surface: #221e1a;
+        --surface-2: #2b2620;
+        --surface-3: #34302a;
+        --border: #3a332c;
+        --text: #efe7d7;
+        --text-muted: #a89e8a;
+        --text-soft: #6e6557;
+        --accent: #d4a24c;
+        --accent-soft: rgba(212, 162, 76, 0.14);
+        --success: #8fa67a;
+        --warn: #c9774e;
+        --tag-sage: #8fa67a;
+        --tag-clay: #c9774e;
+        --tag-rose: #c18b91;
+        --tag-slate: #7c8a95;
+        --tag-ochre: #d4a24c;
+        --tag-plum: #9b7c9e;
+        --tag-fern: #7c9070;
+        --tag-cocoa: #a38872;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        font-family:
+          'Inter Tight',
+          -apple-system,
+          BlinkMacSystemFont,
+          system-ui,
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+      body {
+        line-height: 1.5;
+      }
+
+      .doc {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 56px 24px 96px;
+      }
+      .doc-header {
+        text-align: center;
+        margin-bottom: 64px;
+      }
+      .doc-eyebrow {
+        color: var(--accent);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+      }
+      .doc-title {
+        font-size: 44px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        margin-top: 14px;
+      }
+      .doc-sub {
+        color: var(--text-muted);
+        margin-top: 12px;
+        font-size: 15px;
+      }
+
+      .section-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-soft);
+        margin-bottom: 16px;
+        padding-left: 4px;
+      }
+      .frame {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        overflow: hidden;
+        box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.65);
+        margin-bottom: 48px;
+      }
+      .frame-bar {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface-2);
+      }
+      .frame-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--surface-3);
+      }
+      .frame-title {
+        margin-left: 12px;
+        font-size: 12px;
+        color: var(--text-soft);
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      /* App shell */
+      .app {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        min-height: 720px;
+      }
+
+      /* Rail */
+      .rail {
+        background: var(--surface-2);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px 0;
+        gap: 6px;
+      }
+      .rail-logo {
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        background: var(--accent);
+        color: #1a1714;
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+        font-size: 17px;
+        margin-bottom: 12px;
+        font-family: 'Inter Tight', sans-serif;
+      }
+      .rail-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        color: var(--text-soft);
+        cursor: pointer;
+        background: transparent;
+        border: 0;
+      }
+      .rail-btn:hover {
+        color: var(--text);
+        background: var(--surface-3);
+      }
+      .rail-btn.active {
+        color: #1a1714;
+        background: var(--accent);
+      }
+      .rail-divider {
+        width: 24px;
+        height: 1px;
+        background: var(--border);
+        margin: 8px 0;
+      }
+      .rail-spacer {
+        flex: 1;
+      }
+      .rail-count {
+        font-size: 9px;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--text-soft);
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        letter-spacing: 0.05em;
+      }
+
+      /* Main */
+      .main {
+        padding: 36px 56px 48px;
+      }
+      .top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 28px;
+      }
+      .breadcrumb {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .breadcrumb b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-radius: 99px;
+        font-size: 12px;
+        font-weight: 500;
+        font-family: 'JetBrains Mono', monospace;
+      }
+      .badge::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+
+      /* Triage */
+      .triage {
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        gap: 40px;
+        align-items: start;
+      }
+      .triage-counter {
+        font-size: 52px;
+        font-weight: 600;
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+      .triage-counter span {
+        color: var(--text-soft);
+        font-weight: 400;
+      }
+      .triage-counter-sub {
+        color: var(--text-muted);
+        margin-top: 8px;
+        font-size: 13px;
+      }
+
+      .preview-card {
+        margin-top: 24px;
+        aspect-ratio: 4 / 3;
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--surface-2);
+        position: relative;
+      }
+      .preview-img-1 {
+        background: linear-gradient(
+          180deg,
+          #2c3e50 0%,
+          #4a6b7c 30%,
+          #7a8f8a 55%,
+          #c4a574 75%,
+          #d4a24c 90%,
+          #8b5a2b 100%
+        );
+      }
+      .preview-img-1::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(
+            circle at 28% 22%,
+            rgba(255, 240, 200, 0.4),
+            transparent 18%
+          ),
+          radial-gradient(
+            circle at 72% 72%,
+            rgba(0, 0, 0, 0.3),
+            transparent 35%
+          ),
+          radial-gradient(
+            ellipse at 50% 100%,
+            rgba(0, 0, 0, 0.4),
+            transparent 60%
+          );
+      }
+
+      .file-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 18px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text-muted);
+        flex-wrap: wrap;
+      }
+      .file-meta b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .file-meta .dot {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: var(--text-soft);
+      }
+
+      /* Tag panel */
+      .tag-panel-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-soft);
+        margin-bottom: 14px;
+      }
+      .tag-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .tag-chip {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 9px 12px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        cursor: pointer;
+        transition: all 0.12s;
+      }
+      .tag-chip:hover {
+        background: var(--surface-3);
+        border-color: var(--text-soft);
+      }
+      .tag-chip .key {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: var(--surface-3);
+        color: var(--text-muted);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        font-weight: 500;
+        display: grid;
+        place-items: center;
+        flex-shrink: 0;
+      }
+      .tag-chip .swatch {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+      .tag-chip .name {
+        flex: 1;
+        font-size: 13px;
+      }
+      .tag-chip .count {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--text-soft);
+      }
+
+      .tag-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--border);
+      }
+      .btn {
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-family: inherit;
+      }
+      .btn:hover {
+        background: var(--surface-3);
+      }
+      .btn .key {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text-soft);
+        padding: 2px 6px;
+        background: var(--bg);
+        border-radius: 4px;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #1a1714;
+        border-color: var(--accent);
+        margin-left: auto;
+      }
+      .btn-primary:hover {
+        filter: brightness(1.06);
+      }
+      .btn-primary .key {
+        background: rgba(0, 0, 0, 0.18);
+        color: #1a1714;
+      }
+
+      /* Library */
+      .lib {
+        display: grid;
+        grid-template-columns: 56px 280px 1fr;
+        min-height: 660px;
+      }
+      .lib-side {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        padding: 24px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        overflow: hidden;
+      }
+      .lib-side h3 {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--text-soft);
+        margin-bottom: 10px;
+      }
+      .untagged-card {
+        background: var(--accent-soft);
+        border: 1px solid rgba(212, 162, 76, 0.25);
+        border-radius: 12px;
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: all 0.12s;
+      }
+      .untagged-card:hover {
+        background: rgba(212, 162, 76, 0.18);
+      }
+      .untagged-card .num {
+        font-size: 32px;
+        font-weight: 600;
+        color: var(--accent);
+        letter-spacing: -0.025em;
+        line-height: 1;
+      }
+      .untagged-card .lbl {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 4px;
+      }
+      .search-input {
+        width: 100%;
+        padding: 9px 12px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-size: 13px;
+        font-family: inherit;
+      }
+      .search-input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      .filter-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .filter-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 99px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .filter-tag .swatch {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+      }
+      .filter-tag.on {
+        background: var(--accent-soft);
+        color: var(--accent);
+        border-color: rgba(212, 162, 76, 0.3);
+      }
+      .filter-tag .ct {
+        color: var(--text-soft);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        margin-left: 2px;
+      }
+      .filter-tag.on .ct {
+        color: var(--accent);
+        opacity: 0.7;
+      }
+
+      .lib-main {
+        padding: 28px 32px 32px;
+      }
+      .lib-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .lib-bar .crumb {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .lib-bar .crumb b {
+        color: var(--text);
+        font-weight: 500;
+      }
+      .seg {
+        display: inline-flex;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 2px;
+      }
+      .seg button {
+        background: transparent;
+        border: 0;
+        padding: 5px 12px;
+        font-size: 12px;
+        color: var(--text-muted);
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .seg button.on {
+        background: var(--surface-3);
+        color: var(--text);
+      }
+
+      .lib-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+      }
+      .thumb {
+        aspect-ratio: 1;
+        border-radius: 10px;
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .thumb-tags {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        display: flex;
+        gap: 4px;
+      }
+      .thumb-tag {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.4);
+      }
+      .thumb-name {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 24px 10px 8px;
+        font-size: 11px;
+        font-family: 'JetBrains Mono', monospace;
+        color: rgba(255, 255, 255, 0.95);
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.75));
+        opacity: 0;
+        transition: opacity 0.15s;
+      }
+      .thumb:hover .thumb-name {
+        opacity: 1;
+      }
+
+      /* Done state */
+      .done {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        min-height: 480px;
+      }
+      .done-main {
+        display: grid;
+        place-items: center;
+        padding: 60px 24px;
+        text-align: center;
+      }
+      .done-art {
+        width: 160px;
+        height: 160px;
+        margin-bottom: 28px;
+      }
+      .done h2 {
+        font-size: 34px;
+        font-weight: 600;
+        letter-spacing: -0.025em;
+      }
+      .done p {
+        color: var(--text-muted);
+        margin-top: 10px;
+        max-width: 380px;
+      }
+      .done .footnote {
+        color: var(--text-soft);
+        font-size: 12px;
+        margin-top: 28px;
+        font-family: 'JetBrains Mono', monospace;
+      }
+
+      .caption {
+        color: var(--text-soft);
+        font-size: 13px;
+        text-align: center;
+        margin-top: -28px;
+        margin-bottom: 56px;
+        max-width: 640px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* Palette */
+      .palette {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        margin: 24px 0 0;
+      }
+      .swatch-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .swatch-color {
+        aspect-ratio: 1.4 / 1;
+      }
+      .swatch-meta {
+        padding: 10px 12px;
+      }
+      .swatch-name {
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .swatch-hex {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text-soft);
+        margin-top: 2px;
+      }
+
+      /* Tag colors row */
+      .tag-row {
+        display: grid;
+        grid-template-columns: repeat(8, 1fr);
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .tag-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 12px 10px;
+      }
+      .tag-card .swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        margin-bottom: 8px;
+      }
+      .tag-card .name {
+        font-size: 12px;
+      }
+      .tag-card .hex {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px;
+        color: var(--text-soft);
+        margin-top: 2px;
+      }
+
+      @media (max-width: 900px) {
+        .triage {
+          grid-template-columns: 1fr;
+        }
+        .lib {
+          grid-template-columns: 56px 1fr;
+        }
+        .lib-side {
+          display: none;
+        }
+        .lib-grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        .palette,
+        .tag-row {
+          grid-template-columns: repeat(3, 1fr);
+        }
+        .main {
+          padding: 24px 20px 32px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="doc">
+      <header class="doc-header">
+        <div class="doc-eyebrow">Burrow · concept</div>
+        <h1 class="doc-title">Degu</h1>
+        <p class="doc-sub">A quiet home for your files.</p>
+      </header>
+
+      <!-- 1. TRIAGE -->
+      <div class="section-label">01 · Triage — the new default</div>
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-dot"></span><span class="frame-dot"></span
+          ><span class="frame-dot"></span>
+          <span class="frame-title">degu — triage</span>
+        </div>
+        <div class="app">
+          <aside class="rail">
+            <div class="rail-logo">D</div>
+            <button class="rail-btn active" title="Triage">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 3" />
+              </svg>
+            </button>
+            <button class="rail-btn" title="Library">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+            <button class="rail-btn" title="Tags">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+                />
+                <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+              </svg>
+            </button>
+            <div class="rail-divider"></div>
+            <div class="rail-spacer"></div>
+            <div class="rail-count">photos / 2024</div>
+          </aside>
+          <main class="main">
+            <div class="top-bar">
+              <div class="breadcrumb">photos / <b>2024</b></div>
+              <div class="badge">47 to tag</div>
+            </div>
+            <div class="triage">
+              <div class="triage-stage">
+                <div class="triage-counter">47 <span>untagged</span></div>
+                <div class="triage-counter-sub">
+                  least tagged · most recent first
+                </div>
+                <div class="preview-card preview-img-1"></div>
+                <div class="file-meta">
+                  <b>IMG_2847.heic</b>
+                  <span class="dot"></span>
+                  <span>3.2 MB</span>
+                  <span class="dot"></span>
+                  <span>Apr 12, 2024 · 18:42</span>
+                  <span class="dot"></span>
+                  <span>4032 × 3024</span>
+                </div>
+              </div>
+              <aside>
+                <div class="tag-panel-label">Recent tags · press 1–9</div>
+                <div class="tag-list">
+                  <div class="tag-chip">
+                    <span class="key">1</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-sage)"
+                    ></span
+                    ><span class="name">family</span
+                    ><span class="count">142</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">2</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-clay)"
+                    ></span
+                    ><span class="name">trip</span
+                    ><span class="count">98</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">3</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-ochre)"
+                    ></span
+                    ><span class="name">sunset</span
+                    ><span class="count">61</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">4</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-slate)"
+                    ></span
+                    ><span class="name">portrait</span
+                    ><span class="count">54</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">5</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-fern)"
+                    ></span
+                    ><span class="name">landscape</span
+                    ><span class="count">47</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">6</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-rose)"
+                    ></span
+                    ><span class="name">birthday</span
+                    ><span class="count">29</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">7</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-plum)"
+                    ></span
+                    ><span class="name">work</span
+                    ><span class="count">22</span>
+                  </div>
+                  <div class="tag-chip">
+                    <span class="key">8</span
+                    ><span
+                      class="swatch"
+                      style="background: var(--tag-cocoa)"
+                    ></span
+                    ><span class="name">archive</span
+                    ><span class="count">18</span>
+                  </div>
+                </div>
+                <div class="tag-actions">
+                  <button class="btn"><span class="key">T</span>new</button>
+                  <button class="btn"><span class="key">S</span>skip</button>
+                  <button class="btn btn-primary">
+                    next<span class="key">→</span>
+                  </button>
+                </div>
+              </aside>
+            </div>
+          </main>
+        </div>
+      </div>
+      <p class="caption">
+        One file at a time. Numbers tag, T creates new, → advances. The whole
+        loop is keyboard-only.
+      </p>
+
+      <!-- 2. LIBRARY -->
+      <div class="section-label">02 · Library — calmer browsing</div>
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-dot"></span><span class="frame-dot"></span
+          ><span class="frame-dot"></span>
+          <span class="frame-title">degu — library</span>
+        </div>
+        <div class="lib">
+          <aside class="rail">
+            <div class="rail-logo">D</div>
+            <button class="rail-btn" title="Triage">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 3" />
+              </svg>
+            </button>
+            <button class="rail-btn active" title="Library">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+            <button class="rail-btn" title="Tags">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+                />
+                <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+              </svg>
+            </button>
+          </aside>
+          <aside class="lib-side">
+            <div class="untagged-card">
+              <div class="num">47</div>
+              <div class="lbl">to tag</div>
+            </div>
+            <div>
+              <h3>Search</h3>
+              <input class="search-input" placeholder="Find by name…" />
+            </div>
+            <div>
+              <h3>Show</h3>
+              <div class="seg" style="display: flex; width: 100%">
+                <button style="flex: 1">Images</button>
+                <button class="on" style="flex: 1">Both</button>
+                <button style="flex: 1">Videos</button>
+              </div>
+            </div>
+            <div>
+              <h3>Tags · 23 total</h3>
+              <div class="filter-tags">
+                <span class="filter-tag on"
+                  ><span class="swatch" style="background: var(--tag-sage)"></span
+                  >family<span class="ct">142</span></span
+                >
+                <span class="filter-tag"
+                  ><span class="swatch" style="background: var(--tag-clay)"></span
+                  >trip<span class="ct">98</span></span
+                >
+                <span class="filter-tag"
+                  ><span
+                    class="swatch"
+                    style="background: var(--tag-ochre)"
+                  ></span
+                  >sunset<span class="ct">61</span></span
+                >
+                <span class="filter-tag"
+                  ><span
+                    class="swatch"
+                    style="background: var(--tag-slate)"
+                  ></span
+                  >portrait<span class="ct">54</span></span
+                >
+                <span class="filter-tag"
+                  ><span class="swatch" style="background: var(--tag-fern)"></span
+                  >landscape<span class="ct">47</span></span
+                >
+                <span class="filter-tag"
+                  ><span class="swatch" style="background: var(--tag-rose)"></span
+                  >birthday<span class="ct">29</span></span
+                >
+                <span class="filter-tag"
+                  ><span class="swatch" style="background: var(--tag-plum)"></span
+                  >work<span class="ct">22</span></span
+                >
+                <span class="filter-tag"
+                  ><span
+                    class="swatch"
+                    style="background: var(--tag-cocoa)"
+                  ></span
+                  >archive<span class="ct">18</span></span
+                >
+              </div>
+            </div>
+          </aside>
+          <main class="lib-main">
+            <div class="lib-bar">
+              <div class="crumb">
+                photos / <b>2024</b>
+                <span style="color: var(--text-soft)">·</span>
+                <span style="color: var(--text-soft)">142 files filtered by</span>
+                <span class="filter-tag on"
+                  ><span class="swatch" style="background: var(--tag-sage)"></span
+                  >family</span
+                >
+              </div>
+              <div class="seg">
+                <button class="on">Grid</button>
+                <button>List</button>
+              </div>
+            </div>
+            <div class="lib-grid" id="grid"></div>
+          </main>
+        </div>
+      </div>
+      <p class="caption">
+        Hashed-color tag dots act as a peripheral signature — your eye learns the
+        shape of "family + sunset" without reading text.
+      </p>
+
+      <!-- 3. DONE -->
+      <div class="section-label">03 · All sorted — the reward</div>
+      <div class="frame">
+        <div class="frame-bar">
+          <span class="frame-dot"></span><span class="frame-dot"></span
+          ><span class="frame-dot"></span>
+          <span class="frame-title">degu — triage</span>
+        </div>
+        <div class="done">
+          <aside class="rail">
+            <div class="rail-logo">D</div>
+            <button class="rail-btn active" title="Triage">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            </button>
+            <button class="rail-btn" title="Library">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+            <button class="rail-btn" title="Tags">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path
+                  d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"
+                />
+                <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+              </svg>
+            </button>
+          </aside>
+          <main class="done-main">
+            <svg class="done-art" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="100" cy="172" rx="62" ry="6" fill="rgba(0,0,0,0.35)" />
+              <!-- body -->
+              <ellipse cx="100" cy="118" rx="58" ry="46" fill="#A38872" />
+              <!-- cardigan -->
+              <path
+                d="M 46 118 Q 100 184 154 118 L 150 138 Q 100 184 50 138 Z"
+                fill="#8FA67A"
+              />
+              <!-- cardigan buttons -->
+              <circle cx="100" cy="135" r="2" fill="#3a332c" />
+              <circle cx="100" cy="148" r="2" fill="#3a332c" />
+              <!-- head -->
+              <ellipse cx="100" cy="78" rx="42" ry="38" fill="#B89880" />
+              <!-- ears -->
+              <ellipse cx="70" cy="50" rx="11" ry="15" fill="#9C8068" />
+              <ellipse cx="130" cy="50" rx="11" ry="15" fill="#9C8068" />
+              <ellipse cx="70" cy="53" rx="5" ry="8" fill="#D4A89C" />
+              <ellipse cx="130" cy="53" rx="5" ry="8" fill="#D4A89C" />
+              <!-- glasses -->
+              <circle
+                cx="84"
+                cy="80"
+                r="12"
+                fill="rgba(239,231,215,0.18)"
+                stroke="#2A2520"
+                stroke-width="2.5"
+              />
+              <circle
+                cx="116"
+                cy="80"
+                r="12"
+                fill="rgba(239,231,215,0.18)"
+                stroke="#2A2520"
+                stroke-width="2.5"
+              />
+              <line
+                x1="96"
+                y1="80"
+                x2="104"
+                y2="80"
+                stroke="#2A2520"
+                stroke-width="2.5"
+              />
+              <!-- eyes (closed, content) -->
+              <path
+                d="M 78 80 Q 84 76 90 80"
+                fill="none"
+                stroke="#2A2520"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              <path
+                d="M 110 80 Q 116 76 122 80"
+                fill="none"
+                stroke="#2A2520"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              <!-- nose -->
+              <ellipse cx="100" cy="95" rx="3" ry="2" fill="#2A2520" />
+              <!-- smile -->
+              <path
+                d="M 94 102 Q 100 107 106 102"
+                fill="none"
+                stroke="#2A2520"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+              <!-- whiskers -->
+              <line x1="76" y1="98" x2="58" y2="96" stroke="#6E6557" stroke-width="1" />
+              <line x1="76" y1="101" x2="58" y2="103" stroke="#6E6557" stroke-width="1" />
+              <line x1="124" y1="98" x2="142" y2="96" stroke="#6E6557" stroke-width="1" />
+              <line x1="124" y1="101" x2="142" y2="103" stroke="#6E6557" stroke-width="1" />
+              <!-- hands -->
+              <ellipse cx="56" cy="128" rx="9" ry="7" fill="#A38872" />
+              <ellipse cx="144" cy="128" rx="9" ry="7" fill="#A38872" />
+              <!-- tiny checkmark next to him -->
+              <circle cx="170" cy="60" r="14" fill="#8FA67A" />
+              <path
+                d="M 164 60 l 4 4 l 8 -8"
+                fill="none"
+                stroke="#1A1714"
+                stroke-width="2.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <h2>All sorted.</h2>
+            <p>
+              Burroughs has nothing left to do. Connect another folder, or take a
+              break.
+            </p>
+            <div class="footnote">photos / 2024 · 1,847 files · 23 tags</div>
+          </main>
+        </div>
+      </div>
+      <p class="caption">
+        The reward state. Burroughs only appears when there's nothing to do —
+        never when he'd be in the way.
+      </p>
+
+      <!-- Palette -->
+      <div class="section-label">Palette · Burrow</div>
+      <div class="palette">
+        <div class="swatch-card">
+          <div class="swatch-color" style="background: #1a1714"></div>
+          <div class="swatch-meta">
+            <div class="swatch-name">Canvas</div>
+            <div class="swatch-hex">#1A1714</div>
+          </div>
+        </div>
+        <div class="swatch-card">
+          <div class="swatch-color" style="background: #221e1a"></div>
+          <div class="swatch-meta">
+            <div class="swatch-name">Surface</div>
+            <div class="swatch-hex">#221E1A</div>
+          </div>
+        </div>
+        <div class="swatch-card">
+          <div class="swatch-color" style="background: #efe7d7"></div>
+          <div class="swatch-meta">
+            <div class="swatch-name">Bone</div>
+            <div class="swatch-hex">#EFE7D7</div>
+          </div>
+        </div>
+        <div class="swatch-card">
+          <div class="swatch-color" style="background: #d4a24c"></div>
+          <div class="swatch-meta">
+            <div class="swatch-name">Saffron</div>
+            <div class="swatch-hex">#D4A24C</div>
+          </div>
+        </div>
+        <div class="swatch-card">
+          <div class="swatch-color" style="background: #8fa67a"></div>
+          <div class="swatch-meta">
+            <div class="swatch-name">Sage</div>
+            <div class="swatch-hex">#8FA67A</div>
+          </div>
+        </div>
+        <div class="swatch-card">
+          <div class="swatch-color" style="background: #c9774e"></div>
+          <div class="swatch-meta">
+            <div class="swatch-name">Clay</div>
+            <div class="swatch-hex">#C9774E</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-label" style="margin-top: 40px">Tag colors</div>
+      <div class="tag-row">
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-sage)"></div>
+          <div class="name">sage</div>
+          <div class="hex">#8FA67A</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-clay)"></div>
+          <div class="name">clay</div>
+          <div class="hex">#C9774E</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-rose)"></div>
+          <div class="name">rose</div>
+          <div class="hex">#C18B91</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-slate)"></div>
+          <div class="name">slate</div>
+          <div class="hex">#7C8A95</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-ochre)"></div>
+          <div class="name">ochre</div>
+          <div class="hex">#D4A24C</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-plum)"></div>
+          <div class="name">plum</div>
+          <div class="hex">#9B7C9E</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-fern)"></div>
+          <div class="name">fern</div>
+          <div class="hex">#7C9070</div>
+        </div>
+        <div class="tag-card">
+          <div class="swatch" style="background: var(--tag-cocoa)"></div>
+          <div class="name">cocoa</div>
+          <div class="hex">#A38872</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const tagColors = [
+        'var(--tag-sage)',
+        'var(--tag-clay)',
+        'var(--tag-ochre)',
+        'var(--tag-slate)',
+        'var(--tag-fern)',
+        'var(--tag-rose)',
+        'var(--tag-plum)',
+        'var(--tag-cocoa)',
+      ]
+      const gradients = [
+        'linear-gradient(135deg, #2C3E50, #4A6B7C, #C4A574)',
+        'linear-gradient(180deg, #6B8E5A, #4A6B45, #2A3E25)',
+        'linear-gradient(45deg, #C9774E, #D4A24C, #EFE7D7)',
+        'linear-gradient(160deg, #1A1714, #4A3F35, #A38872)',
+        'linear-gradient(180deg, #7C8A95, #4A5560, #1A1714)',
+        'linear-gradient(135deg, #C18B91, #9B7C9E, #4A3F50)',
+        'linear-gradient(180deg, #D4A24C, #C9774E, #6B3F25)',
+        'linear-gradient(45deg, #2C3E50, #1A1714, #2A2520)',
+        'linear-gradient(135deg, #8FA67A, #C4A574, #D4A24C)',
+        'linear-gradient(180deg, #4A6B7C, #7C8A95, #C4A574)',
+        'linear-gradient(45deg, #6B3F25, #A38872, #EFE7D7)',
+        'linear-gradient(160deg, #9B7C9E, #C18B91, #D4A89C)',
+        'linear-gradient(180deg, #2A3E25, #6B8E5A, #C4A574)',
+        'linear-gradient(135deg, #4A3F50, #7C8A95, #A38872)',
+        'linear-gradient(45deg, #C4A574, #8FA67A, #4A6B45)',
+      ]
+      const names = [
+        'IMG_2847',
+        'IMG_2851',
+        'VID_0042',
+        'IMG_2853',
+        'IMG_2858',
+        'IMG_2861',
+        'VID_0043',
+        'IMG_2867',
+        'IMG_2872',
+        'IMG_2875',
+        'VID_0045',
+        'IMG_2879',
+        'IMG_2884',
+        'IMG_2891',
+        'IMG_2895',
+      ]
+      const grid = document.getElementById('grid')
+      if (grid) {
+        gradients.forEach((g, i) => {
+          const el = document.createElement('div')
+          el.className = 'thumb'
+          el.style.background = g
+          const dotCount = 1 + (i % 4)
+          const dotsHtml = Array.from(
+            { length: dotCount },
+            (_, k) =>
+              `<span class="thumb-tag" style="background:${tagColors[(i + k) % tagColors.length]}"></span>`
+          ).join('')
+          el.innerHTML = `<div class="thumb-tags">${dotsHtml}</div><div class="thumb-name">${names[i]}.heic</div>`
+          grid.appendChild(el)
+        })
+      }
+    </script>
+  </body>
+</html>

@@ -740,6 +740,10 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
     selectionAnchorRef.current = null
   }, [currentDir, isTagFilterMode, isSearchMode])
 
+  useEffect(() => {
+    selectionAnchorRef.current = null
+  }, [sortedDisplayFiles])
+
   const onFileItemClick = useCallback(
     (e: MouseEvent, file: FileListItem, index: number) => {
       if (e.detail === 2) return
@@ -750,7 +754,9 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
         const end = Math.max(anchor, index)
         const keys = new Set<string>()
         for (let i = start; i <= end; i++) {
-          keys.add(sortedDisplayFiles[i].tagStorageKey)
+          const f = sortedDisplayFiles[i]
+          if (!f) continue
+          keys.add(f.tagStorageKey)
         }
         setSelectedKeys(keys)
         return
@@ -911,10 +917,6 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
   }, [])
 
   const clearViewer = useCallback(() => setViewerItems([]), [])
-
-  const onReload = useCallback(() => {
-    window.location.reload()
-  }, [])
 
   const onFileContextMenu = useCallback(
     (e: MouseEvent, file: FileListItem) => {
@@ -1124,7 +1126,6 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
         onClearFilters={clearFilters}
         stack={stack}
         onBreadcrumb={goBreadcrumb}
-        onReload={onReload}
       />
 
       <div class="flex min-h-0 min-w-0 flex-1 overflow-hidden">
@@ -1224,7 +1225,10 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
 
         <main class="min-h-0 flex-1 overflow-y-auto px-4 py-6">
           {mainLoading ? (
-            <div class="mx-auto flex max-w-md flex-col gap-3 text-center">
+            <div
+              class="mx-auto flex max-w-md flex-col gap-3 text-center"
+              aria-live="polite"
+            >
               <p class="text-zinc-500">
                 {isTagFilterMode
                   ? filterUntagged
@@ -1679,13 +1683,28 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
                     void (async () => {
                       try {
                         const blobFile = await f.handle.getFile()
+                        const mime = blobFile.type
+                        const isMedia =
+                          mime.startsWith('image/') ||
+                          mime.startsWith('video/') ||
+                          mime.startsWith('audio/')
+                        if (!isMedia) {
+                          console.warn(
+                            `Refusing to open "${f.name}" in a new tab: type "${mime || 'unknown'}" is not a known image/video/audio type.`
+                          )
+                          return
+                        }
                         const url = URL.createObjectURL(blobFile)
                         const opened = window.open(url, '_blank', 'noopener,noreferrer')
                         if (!opened) {
                           URL.revokeObjectURL(url)
                           return
                         }
-                        window.setTimeout(() => URL.revokeObjectURL(url), 120_000)
+                        window.addEventListener(
+                          'pagehide',
+                          () => URL.revokeObjectURL(url),
+                          { once: true }
+                        )
                       } catch {
                         /* ignore */
                       }

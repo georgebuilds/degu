@@ -79,6 +79,10 @@ export const FileRow = memo(function FileRow({
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={item.name}
       class={
         selected
           ? 'flex flex-col gap-2 rounded-lg border-2 border-sky-500 bg-zinc-900/50 px-3 py-2 ring-1 ring-sky-500/30'
@@ -95,6 +99,24 @@ export const FileRow = memo(function FileRow({
         const pk = previewKind
         const fi = item as FileListItem
         if (pk) onPreview(fi, pk)
+      }}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          const pk = previewKind
+          const fi = item as FileListItem
+          if (pk) onPreview(fi, pk)
+        } else if (e.key === ' ') {
+          e.preventDefault()
+          const synthetic = {
+            ...e,
+            button: 0,
+            shiftKey: e.shiftKey,
+            metaKey: e.metaKey,
+            ctrlKey: e.ctrlKey,
+          } as unknown as MouseEvent
+          onFileSelect?.(synthetic, item as FileListItem)
+        }
       }}
       onContextMenu={e => {
         e.preventDefault()

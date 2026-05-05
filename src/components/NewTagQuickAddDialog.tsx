@@ -1,5 +1,6 @@
 import type { RefObject } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type NewTagQuickAddDialogProps = {
   open: boolean
@@ -24,19 +25,10 @@ export function NewTagQuickAddDialog({
     queueMicrotask(() => inputRef.current?.focus())
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        onClose()
-        queueMicrotask(() => triggerRef?.current?.focus())
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [open, onClose, triggerRef])
+  useModalEscape(open, () => {
+    onClose()
+    queueMicrotask(() => triggerRef?.current?.focus())
+  })
 
   if (!open) return null
 

@@ -23,7 +23,34 @@ export const FileThumbnail = memo(function FileThumbnail({
   onContextMenu,
 }: FileThumbnailProps) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null)
+  const [visible, setVisible] = useState(false)
   const urlRef = useRef<string | null>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (previewKind !== 'image') return
+    if (visible) return
+    const el = cardRef.current
+    if (!el) return
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true)
+      return
+    }
+    const obs = new IntersectionObserver(
+      entries => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setVisible(true)
+            obs.disconnect()
+            break
+          }
+        }
+      },
+      { rootMargin: '200px' }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [previewKind, visible])
 
   useEffect(() => {
     if (previewKind !== 'image') {
@@ -34,6 +61,8 @@ export const FileThumbnail = memo(function FileThumbnail({
       setThumbUrl(null)
       return
     }
+    if (!visible) return
+    if (urlRef.current) return
     let cancelled = false
     void (async () => {
       const file = await item.handle.getFile()
@@ -63,13 +92,17 @@ export const FileThumbnail = memo(function FileThumbnail({
     })()
     return () => {
       cancelled = true
+    }
+  }, [item.handle, previewKind, visible])
+
+  useEffect(() => {
+    return () => {
       if (urlRef.current) {
         URL.revokeObjectURL(urlRef.current)
         urlRef.current = null
       }
-      setThumbUrl(null)
     }
-  }, [item.handle, previewKind])
+  }, [])
 
   const onPreviewClick = useCallback(
     (e: MouseEvent) => {
@@ -99,9 +132,11 @@ export const FileThumbnail = memo(function FileThumbnail({
 
   return (
     <div
+      ref={cardRef}
       role="button"
       tabIndex={0}
       aria-label={item.name}
+      aria-pressed={selected}
       class={
         selected
           ? 'group flex cursor-pointer flex-col overflow-hidden rounded-xl border-2 border-sky-500 bg-zinc-900/70 ring-1 ring-sky-500/40 transition hover:border-sky-400'
@@ -132,6 +167,14 @@ export const FileThumbnail = memo(function FileThumbnail({
       }}
     >
       <div class="relative aspect-square bg-zinc-950/80">
+        {selected ? (
+          <span
+            class="absolute left-2 top-2 z-10 grid h-5 w-5 place-items-center rounded-full bg-sky-500 text-[11px] font-bold text-white shadow"
+            aria-hidden
+          >
+            ✓
+          </span>
+        ) : null}
         {previewKind === 'image' && thumbUrl ? (
           <img
             src={thumbUrl}

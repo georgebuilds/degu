@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
+import { useCallback, useRef, useState } from 'preact/hooks'
 import { formatBytes } from '../lib/format-bytes'
 import {
   computeStorageStats,
@@ -7,6 +7,7 @@ import {
 } from '../lib/storage-stats'
 import { useFocusTrap } from '../lib/use-focus-trap'
 import { ProgressBar } from './ProgressBar.tsx'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type StorageStatsModalProps = {
   rootHandle: FileSystemDirectoryHandle
@@ -66,13 +67,9 @@ export function StorageStatsModal({
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, phase !== 'running')
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && phase !== 'running') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [phase, onClose])
+  useModalEscape(true, () => {
+    if (phase !== 'running') onClose()
+  })
 
   const run = useCallback(async () => {
     setRunError(null)

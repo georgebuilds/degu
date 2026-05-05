@@ -49,11 +49,18 @@ export function TriageScreen({ rootHandle, rootFolderName }: TriageScreenProps) 
   const [scanError, setScanError] = useState<string | null>(null)
   const [cursor, setCursor] = useState(0)
   const tagIndexVersion = useTagIndexVersion()
+  const queueRef = useRef<Item[] | null>(null)
+  const cursorRef = useRef(0)
+  queueRef.current = queue
+  cursorRef.current = cursor
 
   useEffect(() => {
     let cancelled = false
-    setQueue(null)
-    setScanError(null)
+    const isInitial = queueRef.current === null
+    if (isInitial) {
+      setQueue(null)
+      setScanError(null)
+    }
     void (async () => {
       try {
         const paths = await collectAllMediaRelativePaths(rootHandle)
@@ -65,8 +72,33 @@ export function TriageScreen({ rootHandle, rootFolderName }: TriageScreenProps) 
         items.sort(
           (a, b) => a.tagCount - b.tagCount || a.path.localeCompare(b.path)
         )
+        const prevQueue = queueRef.current
+        const prevCursor = cursorRef.current
+        const prevPath =
+          prevQueue && prevCursor < prevQueue.length
+            ? prevQueue[prevCursor]!.path
+            : null
         setQueue(items)
-        setCursor(0)
+        if (prevPath === null) {
+          setCursor(0)
+          return
+        }
+        const newIdx = items.findIndex(it => it.path === prevPath)
+        if (newIdx !== -1) {
+          setCursor(newIdx)
+          return
+        }
+        // Current item is gone (e.g. became fully reviewed and filtered out);
+        // try the next sibling from the previous queue, then clamp.
+        for (let i = prevCursor + 1; i < prevQueue!.length; i++) {
+          const nextPath = prevQueue![i]!.path
+          const j = items.findIndex(it => it.path === nextPath)
+          if (j !== -1) {
+            setCursor(j)
+            return
+          }
+        }
+        setCursor(Math.min(prevCursor, items.length))
       } catch (e) {
         if (cancelled) return
         setScanError(e instanceof Error ? e.message : String(e))

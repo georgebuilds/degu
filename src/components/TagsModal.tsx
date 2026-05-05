@@ -7,6 +7,7 @@ import { getRecentTags, recordTagApplied } from '../lib/recent-tags'
 import { getDistinctTagsFromIndex, getTags, setTags } from '../lib/tags'
 import { TagEditor } from './TagEditor.tsx'
 import { useFocusTrap } from '../lib/use-focus-trap'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type TagsModalProps = {
   /**
@@ -68,13 +69,7 @@ export function TagsModal({
     setLoading(false)
   }, [keysJoined, tagsAllowed])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  useModalEscape(true, onClose)
 
   const persist = useCallback(
     (next: string[]) => {

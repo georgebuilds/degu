@@ -1,5 +1,6 @@
 import { type ComponentChildren } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type MoreTagsQuickAddDropdownProps = {
   tags: readonly string[]
@@ -46,18 +47,7 @@ export function MoreTagsQuickAddDropdown({
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        e.stopPropagation()
-        setOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [open])
+  useModalEscape(open, () => setOpen(false))
 
   if (tags.length === 0) return null
 

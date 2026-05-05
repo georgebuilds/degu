@@ -25,7 +25,6 @@ type SidebarProps = {
   onClearFilters: () => void
   stack: FileSystemDirectoryHandle[]
   onBreadcrumb: (index: number) => void
-  onReload: () => void
 }
 
 export function Sidebar({
@@ -47,7 +46,6 @@ export function Sidebar({
   onClearFilters,
   stack,
   onBreadcrumb,
-  // onReload,
 }: SidebarProps) {
   return (
     <aside
@@ -99,14 +97,6 @@ export function Sidebar({
                 </button>
               ))}
             </div>
-            {/* <button
-              type="button"
-              class="rounded-md px-2 py-1.5 text-left text-sm text-zinc-200 hover:bg-zinc-800"
-              onClick={onReload}
-            >
-              Reload page
-            </button> */}
-    
           </nav>
 
           <div>
@@ -221,7 +211,7 @@ export function Sidebar({
               </li>
             </ul>
             {tagsLoading ? (
-              <div class="flex flex-col gap-2">
+              <div class="flex flex-col gap-2" aria-live="polite">
                 <p class="text-xs text-zinc-500">
                   Scanning folder tree for tags…
                 </p>

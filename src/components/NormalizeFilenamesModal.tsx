@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
+import { useCallback, useRef, useState } from 'preact/hooks'
 import {
   runNormalizeFilenames,
   type NormalizeProgress,
@@ -6,6 +6,7 @@ import {
 } from '../lib/normalize-filenames'
 import { useFocusTrap } from '../lib/use-focus-trap'
 import { ProgressBar } from './ProgressBar.tsx'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type NormalizeFilenamesModalProps = {
   rootHandle: FileSystemDirectoryHandle
@@ -29,18 +30,13 @@ export function NormalizeFilenamesModal({
   const runAbortRef = useRef<AbortController | null>(null)
   useFocusTrap(dialogRef, phase !== 'running')
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      if (phase === 'configure' || phase === 'report') {
-        onClose()
-      } else if (phase === 'running') {
-        runAbortRef.current?.abort()
-      }
+  useModalEscape(true, () => {
+    if (phase === 'configure' || phase === 'report') {
+      onClose()
+    } else if (phase === 'running') {
+      runAbortRef.current?.abort()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [phase, onClose])
+  })
 
   const run = useCallback(async () => {
     setRunError(null)

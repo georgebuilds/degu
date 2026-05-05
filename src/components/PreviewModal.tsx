@@ -26,6 +26,7 @@ import { NewTagQuickAddDialog } from './NewTagQuickAddDialog.tsx'
 import { useRecentTags } from '../lib/use-recent-tags.ts'
 import { useFocusTrap } from '../lib/use-focus-trap.ts'
 import { useFileBlobURL } from '../lib/use-blob-url.ts'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type PreviewModalProps = {
   fileHandle: FileSystemFileHandle
@@ -148,14 +149,28 @@ export function PreviewModal({
   )
 
   useEffect(() => {
-    const next: Record<string, { start: string; end: string }> = {}
-    for (const l of loops) {
-      next[l.id] = {
-        start: String(l.startSec),
-        end: String(l.endSec),
+    setLoopTimeDraftById(prev => {
+      const ids = new Set(loops.map(l => l.id))
+      let changed = false
+      const next: Record<string, { start: string; end: string }> = {}
+      for (const id in prev) {
+        if (ids.has(id)) {
+          next[id] = prev[id]!
+        } else {
+          changed = true
+        }
       }
-    }
-    setLoopTimeDraftById(next)
+      for (const l of loops) {
+        if (!(l.id in next)) {
+          next[l.id] = {
+            start: String(l.startSec),
+            end: String(l.endSec),
+          }
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
   }, [loops])
 
   const markDraftStart = useCallback(() => {
@@ -304,12 +319,11 @@ export function PreviewModal({
     [fileHandle, fileName, saveDirectoryHandle, onTrimExported]
   )
 
+  useModalEscape(true, onClose)
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
+      if (e.key === 'Escape') return
       if (keyboardTargetIsEditable(e.target)) return
       if (e.key === 'ArrowLeft' && onNavigateSibling) {
         e.preventDefault()
@@ -323,7 +337,7 @@ export function PreviewModal({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose, onNavigateSibling])
+  }, [onNavigateSibling])
 
   useEffect(() => {
     return () => {

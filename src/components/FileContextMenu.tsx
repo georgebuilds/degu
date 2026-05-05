@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks'
 import type { ComponentChildren } from 'preact'
+import { useModalEscape } from './use-modal-stack.ts'
 
 type FileContextMenuProps = {
   x: number
@@ -16,19 +17,16 @@ export function FileContextMenu({
 }: FileContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null)
 
+  useModalEscape(true, onClose)
+
   useEffect(() => {
     const onPointer = (e: MouseEvent) => {
       const el = ref.current
       if (el && !el.contains(e.target as Node)) onClose()
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
     document.addEventListener('mousedown', onPointer)
-    document.addEventListener('keydown', onKey)
     return () => {
       document.removeEventListener('mousedown', onPointer)
-      document.removeEventListener('keydown', onKey)
     }
   }, [onClose])
 

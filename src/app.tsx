@@ -12,7 +12,7 @@ import {
   setActiveDriver,
   type StorageDriver,
 } from './lib/storage-driver.ts'
-import { flushTagIndex, initTagIndex } from './lib/tags.ts'
+import { flushTagIndexBeacon, initTagIndex } from './lib/tags.ts'
 
 /**
  * Boot phases:
@@ -93,7 +93,7 @@ export function App() {
 
   useEffect(() => {
     const onHide = () => {
-      void flushTagIndex().catch(() => {})
+      void flushTagIndexBeacon().catch(() => {})
     }
     window.addEventListener('pagehide', onHide)
     return () => window.removeEventListener('pagehide', onHide)

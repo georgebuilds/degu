@@ -20,46 +20,117 @@ let lastReviewedMap: TimestampMap | null = null
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
-async function writeStateToBackend(): Promise<void> {
-  if (!index) return
+export type LoadState = 'idle' | 'loading' | 'loaded' | 'failed'
+let loadState: LoadState = 'idle'
+let loadError: Error | null = null
+let lastSaveError: Error | null = null
+
+/**
+ * Single in-flight save promise; if a save request comes in while another is
+ * running, we set `pendingSave` instead of starting a parallel write. The
+ * in-flight save's `.finally` hook re-enters the writer if the flag is set.
+ */
+let inFlightSave: Promise<void> | null = null
+let pendingSave = false
+let pendingKeepalive = false
+
+async function writeStateToBackend(keepalive: boolean): Promise<void> {
+  if (!index || loadState !== 'loaded') return
   const driver = getActiveDriver()
-  await driver.saveTags({
-    tags: index,
-    videoLoops: videoLoopsMap ?? {},
-    tagCreatedAt: tagCreatedAtMap ?? {},
-    lastReviewed: lastReviewedMap ?? {},
+  await driver.saveTags(
+    {
+      tags: index,
+      videoLoops: videoLoopsMap ?? {},
+      tagCreatedAt: tagCreatedAtMap ?? {},
+      lastReviewed: lastReviewedMap ?? {},
+    },
+    keepalive ? { keepalive: true } : undefined
+  )
+}
+
+/**
+ * Trigger a save, serialising through `inFlightSave`. If a save is already
+ * running, mark `pendingSave` and return — the runner will pick up the latest
+ * state on completion.
+ */
+function triggerSave(keepalive = false): Promise<void> {
+  if (loadState !== 'loaded') return Promise.resolve()
+  if (keepalive) pendingKeepalive = true
+  if (inFlightSave) {
+    pendingSave = true
+    return inFlightSave
+  }
+  const useKeepalive = keepalive || pendingKeepalive
+  pendingKeepalive = false
+  const run = (async () => {
+    try {
+      await writeStateToBackend(useKeepalive)
+      lastSaveError = null
+    } catch (e) {
+      lastSaveError = e instanceof Error ? e : new Error(String(e))
+      bumpTagIndexVersion()
+    }
+  })().finally(() => {
+    inFlightSave = null
+    if (pendingSave) {
+      pendingSave = false
+      void triggerSave()
+    }
   })
+  inFlightSave = run
+  return run
 }
 
 function scheduleSave(): void {
+  if (loadState !== 'loaded') return
   if (saveTimer !== null) clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
     saveTimer = null
-    void writeStateToBackend().catch(() => {
-      /* write failed; data still in memory. surfacing is a deferred follow-up */
-    })
+    void triggerSave()
   }, SAVE_DEBOUNCE_MS)
 }
 
 /**
- * Flush pending debounced writes. Call on `pagehide` / before unload.
+ * Flush pending debounced writes. Awaits any in-flight + pending save chain.
+ * Call on `pagehide` / before unload.
  */
-export function flushTagIndex(): Promise<void> {
+export async function flushTagIndex(): Promise<void> {
   if (saveTimer !== null) {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  return writeStateToBackend()
+  if (loadState !== 'loaded') return
+  await triggerSave()
+  while (inFlightSave) {
+    await inFlightSave
+  }
 }
 
 /**
- * Load the current tag state via the active storage driver. Idempotent.
+ * Like {@link flushTagIndex}, but tells the driver this is a `pagehide`
+ * callback so it can use `keepalive: true` / `sendBeacon` to survive the
+ * browser tearing down the page mid-fetch.
+ */
+export async function flushTagIndexBeacon(): Promise<void> {
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  if (loadState !== 'loaded') return
+  await triggerSave(true)
+  while (inFlightSave) {
+    await inFlightSave
+  }
+}
+
+/**
+ * Load the current tag state via the active storage driver.
  *
  * Requires `setActiveDriver` to have been called first (the boot sequence in
- * app.tsx connects the driver before invoking initTagIndex). On load failure
- * we fall back to an empty in-memory index so the UI keeps functioning; the
- * deferred follow-up will gate writes when the load failed (today the next
- * `setTags` would overwrite real data with the empty-loaded state).
+ * app.tsx connects the driver before invoking initTagIndex). On failure the
+ * load state is set to `'failed'` and `index` is left null, which gates
+ * `setTags` and friends so a follow-up mutation cannot overwrite the real
+ * on-disk data with an empty payload.
  */
 export async function initTagIndex(): Promise<void> {
   if (saveTimer !== null) {
@@ -67,9 +138,12 @@ export async function initTagIndex(): Promise<void> {
     saveTimer = null
   }
   index = null
-  videoLoopsMap = {}
-  tagCreatedAtMap = {}
-  lastReviewedMap = {}
+  videoLoopsMap = null
+  tagCreatedAtMap = null
+  lastReviewedMap = null
+  loadState = 'loading'
+  loadError = null
+  lastSaveError = null
 
   try {
     const driver = getActiveDriver()
@@ -78,13 +152,13 @@ export async function initTagIndex(): Promise<void> {
     videoLoopsMap = payload.videoLoops
     tagCreatedAtMap = payload.tagCreatedAt
     lastReviewedMap = payload.lastReviewed
-  } catch {
-    index = {}
-    videoLoopsMap = {}
-    tagCreatedAtMap = {}
-    lastReviewedMap = {}
-  } finally {
-    if (index === null) index = {}
+    loadState = 'loaded'
+    bumpTagIndexVersion()
+  } catch (e) {
+    loadState = 'failed'
+    loadError = e instanceof Error ? e : new Error(String(e))
+    bumpTagIndexVersion()
+    throw loadError
   }
 }
 
@@ -129,15 +203,15 @@ function stampTimestamps(storageKey: string, tags: readonly string[]): void {
 }
 
 export function setTags(storageKey: string, tags: string[]): void {
-  if (!index) {
-    index = {}
-  }
+  if (loadState !== 'loaded' || !index) return
   if (tags.length === 0) {
     delete index[storageKey]
+    if (lastReviewedMap) delete lastReviewedMap[storageKey]
+    if (tagCreatedAtMap) delete tagCreatedAtMap[storageKey]
   } else {
     index[storageKey] = tags
+    stampTimestamps(storageKey, tags)
   }
-  stampTimestamps(storageKey, tags)
   bumpTagIndexVersion()
   scheduleSave()
 }
@@ -167,6 +241,7 @@ export function getTagCreatedAt(tag: string): string | null {
  * Triage "skip" action) — it removes the file from the stale-files queue.
  */
 export function markReviewed(storageKey: string): void {
+  if (loadState !== 'loaded') return
   if (!lastReviewedMap) lastReviewedMap = {}
   lastReviewedMap[storageKey] = new Date().toISOString()
   bumpTagIndexVersion()
@@ -228,6 +303,7 @@ export function getVideoLoops(storageKey: string): VideoLoop[] {
 }
 
 export function setVideoLoops(storageKey: string, loops: VideoLoop[]): void {
+  if (loadState !== 'loaded') return
   if (!videoLoopsMap) videoLoopsMap = {}
   if (loops.length === 0) {
     delete videoLoopsMap[storageKey]
@@ -263,6 +339,7 @@ function renameTagStorageKeyCore(oldKey: string, newKey: string): void {
  * Move tags and video loops from `oldKey` to `newKey` after a file rename on disk.
  */
 export function renameTagStorageKey(oldKey: string, newKey: string): void {
+  if (loadState !== 'loaded') return
   renameTagStorageKeyCore(oldKey, newKey)
   if (tagSaveSuppressed === 0) {
     bumpTagIndexVersion()
@@ -276,6 +353,7 @@ export function renameTagStorageKey(oldKey: string, newKey: string): void {
 export function renameTagStorageKeysBatch(
   pairs: readonly { from: string; to: string }[]
 ): void {
+  if (loadState !== 'loaded') return
   tagSaveSuppressed++
   try {
     for (const { from, to } of pairs) {
@@ -312,6 +390,18 @@ export function getTagIndexVersion(): number {
 export function subscribeTagIndexVersion(fn: VersionListener): () => void {
   versionListeners.add(fn)
   return () => { versionListeners.delete(fn) }
+}
+
+export function getLoadState(): LoadState {
+  return loadState
+}
+
+export function getLoadError(): Error | null {
+  return loadError
+}
+
+export function getLastSaveError(): Error | null {
+  return lastSaveError
 }
 
 export type TagIndexAggregate = {

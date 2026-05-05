@@ -17,7 +17,7 @@
  * `FileSystemDirectoryHandle`. Component code (browse, preview, viewer pane,
  * trim, normalize, delete, search) programs against that FSA-shaped surface
  * and stays driver-agnostic. The driver adds the operations the FSA shape
- * doesn't cover — tag persistence, server-only optimisations.
+ * doesn't cover — tag persistence.
  *
  * A module-level singleton (`active`) holds the connected driver so callers
  * don't have to prop-drill it through the component tree. tags.ts and other
@@ -32,23 +32,6 @@ import type { TimestampMap, VideoLoop } from './index-json'
 export type StorageDriverKind = 'http' | 'fsa'
 
 /**
- * Capability flags so callers can pick the optimised path when available and
- * gracefully fall back when not. Each flag is a feature the HTTP driver
- * provides via the Go server but the FSA driver can only emulate
- * (or, sometimes, can't emulate at all).
- */
-export type DriverCapabilities = {
-  /** `/api/thumb` — server-rendered thumbnails. FSA mode decodes client-side. */
-  serverThumbnails: boolean
-  /** `/api/stats` — server-side tree walk. FSA mode walks client-side. */
-  serverStats: boolean
-  /** `/api/move/batch` — atomic batched rename. FSA mode does N sequential moves. */
-  batchMove: boolean
-  /** `/api/file/<path>` direct URL for `<img>` / `<video>` src. FSA mode uses blob URLs. */
-  directFileURLs: boolean
-}
-
-/**
  * Tag + video-loop + timestamp payload, normalised across both drivers.
  * HttpDriver fetches it from `/api/tags`. FsaDriver reads `index.json` at root.
  */
@@ -59,13 +42,9 @@ export type TagPayload = {
   lastReviewed: TimestampMap
 }
 
-/** Server-side stats response. Only available when `capabilities.serverStats`. */
-export type DriverStatsResponse = {
-  totalBytes: number
-  totalFiles: number
-  byKind: { image: number; video: number }
-  byExt: Array<{ ext: string; bytes: number; files: number }>
-  byTag: Array<{ tag: string; bytes: number; files: number }>
+export type SaveTagsOptions = {
+  /** Hint that the caller is a `pagehide`/unload handler; driver may use `keepalive` / `sendBeacon`. */
+  keepalive?: boolean
 }
 
 export type StorageDriver = {
@@ -77,25 +56,11 @@ export type StorageDriver = {
   /** Folder name shown in the mode rail and breadcrumb. */
   readonly rootName: string
 
-  readonly capabilities: DriverCapabilities
-
   /** Load the persisted tag payload (empty record on first run). */
   loadTags(): Promise<TagPayload>
 
   /** Persist the tag payload. Called after the in-memory debounce in tags.ts. */
-  saveTags(payload: TagPayload): Promise<void>
-
-  /** Server-side stats walk. Implementations without `capabilities.serverStats` omit this. */
-  fetchStats?(): Promise<DriverStatsResponse>
-
-  /** Direct URL for an `<img>` / `<video>` src. Omitted when blob URLs are required. */
-  fileURL?(relativePath: string): string
-
-  /** Server-rendered thumbnail URL. Omitted in FSA mode. */
-  thumbURL?(relativePath: string, width: number): string
-
-  /** Atomic batched rename. Omitted when callers must do sequential moves. */
-  moveBatch?(pairs: ReadonlyArray<{ from: string; to: string }>): Promise<void>
+  saveTags(payload: TagPayload, options?: SaveTagsOptions): Promise<void>
 }
 
 /** Module-level active driver. tags.ts and components read this to dispatch. */

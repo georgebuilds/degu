@@ -18,19 +18,13 @@ import {
   parseIndexPayload,
 } from './index-json'
 import type {
-  DriverCapabilities,
   StorageDriver,
   TagPayload,
 } from './storage-driver'
 
 const INDEX_FILE = 'index.json'
-
-const FSA_CAPABILITIES: DriverCapabilities = {
-  serverThumbnails: false,
-  serverStats: false,
-  batchMove: false,
-  directFileURLs: false,
-}
+const INDEX_TMP_FILE = 'index.json.tmp'
+const INDEX_BAK_FILE = 'index.json.bak'
 
 type ShowDirectoryPicker = (options?: {
   mode?: 'read' | 'readwrite'
@@ -48,13 +42,17 @@ type WritableCapableFileHandle = FileSystemFileHandle & {
   }): Promise<WritableFileStream>
 }
 
+type MoveCapableFileHandle = FileSystemFileHandle & {
+  move(newName: string): Promise<void>
+  move(parent: FileSystemDirectoryHandle, newName: string): Promise<void>
+}
+
 export function isFileSystemAccessSupported(): boolean {
   return typeof window !== 'undefined' && 'showDirectoryPicker' in window
 }
 
 export class FsaDriver implements StorageDriver {
   readonly kind = 'fsa' as const
-  readonly capabilities = FSA_CAPABILITIES
   readonly rootHandle: FileSystemDirectoryHandle
   readonly rootName: string
 
@@ -90,27 +88,27 @@ export class FsaDriver implements StorageDriver {
   }
 
   async loadTags(): Promise<TagPayload> {
+    let text: string
     try {
       const fh = await this.rootHandle.getFileHandle(INDEX_FILE)
       const file = await fh.getFile()
-      const text = await file.text()
-      if (!text.trim()) {
-        return emptyPayload()
-      }
-      const json = JSON.parse(text) as unknown
-      return parseIndexPayload(json)
+      text = await file.text()
     } catch (e) {
-      // First run on this folder — no index.json yet. Treat as empty.
       if (e instanceof DOMException && e.name === 'NotFoundError') {
-        return emptyPayload()
-      }
-      // Corrupt JSON should not blow up boot — log via the thrown error and
-      // start fresh. The user can restore from a backup if they have one.
-      if (e instanceof SyntaxError) {
         return emptyPayload()
       }
       throw e
     }
+    if (!text.trim()) {
+      return emptyPayload()
+    }
+    /**
+     * Surface SyntaxError so the caller can refuse to overwrite a corrupt
+     * file on the next save. A silent reset would let one bad parse wipe
+     * the user's tags.
+     */
+    const json = JSON.parse(text) as unknown
+    return parseIndexPayload(json)
   }
 
   async saveTags(payload: TagPayload): Promise<void> {
@@ -121,15 +119,93 @@ export class FsaDriver implements StorageDriver {
       payload.lastReviewed
     )
     const text = JSON.stringify(obj, null, 2)
-    const fh = (await this.rootHandle.getFileHandle(INDEX_FILE, {
+
+    const tmp = (await this.rootHandle.getFileHandle(INDEX_TMP_FILE, {
       create: true,
     })) as WritableCapableFileHandle
-    const writable = await fh.createWritable()
+    const writable = await tmp.createWritable()
+    let writeOk = false
     try {
       await writable.write(text)
+      writeOk = true
     } finally {
-      await writable.close()
+      if (!writeOk) {
+        try { await writable.close() } catch { /* swallow */ }
+      } else {
+        await writable.close()
+      }
     }
+
+    if (await tryRenameTmpOverIndex(tmp)) {
+      return
+    }
+
+    /**
+     * `move` unavailable — fall back to bak/replace/cleanup. We still get
+     * crash safety: at any point the user has either the previous index in
+     * place, the previous index in `.bak`, or the new index plus a leftover
+     * `.bak` they can delete.
+     */
+    await this.fallbackBakReplace(text)
+    await this.removeIfExists(INDEX_TMP_FILE)
+  }
+
+  private async fallbackBakReplace(text: string): Promise<void> {
+    const existing = await this.readIfExists(INDEX_FILE)
+    if (existing !== null) {
+      const bak = (await this.rootHandle.getFileHandle(INDEX_BAK_FILE, {
+        create: true,
+      })) as WritableCapableFileHandle
+      const w = await bak.createWritable()
+      try {
+        await w.write(existing)
+      } finally {
+        await w.close()
+      }
+    }
+    const real = (await this.rootHandle.getFileHandle(INDEX_FILE, {
+      create: true,
+    })) as WritableCapableFileHandle
+    const w = await real.createWritable()
+    try {
+      await w.write(text)
+    } finally {
+      await w.close()
+    }
+    await this.removeIfExists(INDEX_BAK_FILE)
+  }
+
+  private async readIfExists(name: string): Promise<string | null> {
+    try {
+      const fh = await this.rootHandle.getFileHandle(name)
+      const f = await fh.getFile()
+      return await f.text()
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'NotFoundError') return null
+      throw e
+    }
+  }
+
+  private async removeIfExists(name: string): Promise<void> {
+    try {
+      await this.rootHandle.removeEntry(name)
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'NotFoundError') return
+      throw e
+    }
+  }
+}
+
+async function tryRenameTmpOverIndex(
+  tmp: FileSystemFileHandle
+): Promise<boolean> {
+  const moveable = tmp as Partial<MoveCapableFileHandle>
+  if (typeof moveable.move !== 'function') return false
+  try {
+    await (moveable.move as (n: string) => Promise<void>)(INDEX_FILE)
+    return true
+  } catch {
+    return false
   }
 }
 

@@ -18,6 +18,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -34,7 +35,9 @@ var version = "dev"
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: degu [path]\n\n")
-		fmt.Fprintf(os.Stderr, "  path defaults to ~/Pictures (or ~/ if missing).\n\n")
+		fmt.Fprintf(os.Stderr, "  With no path, degu serves the folder it lives in when that\n")
+		fmt.Fprintf(os.Stderr, "  folder is somewhere personal under your home dir. Otherwise\n")
+		fmt.Fprintf(os.Stderr, "  it falls back to ~/Pictures (or ~/ if Pictures is missing).\n\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -102,8 +105,12 @@ func main() {
 // resolveRoot picks the media root to scope the server and degu.db to.
 //
 // CLI arg wins when present (so `open -a degu --args /path` and `degu /path`
-// both work). Otherwise we default to ~/Pictures, falling back to the user's
-// home directory if Pictures isn't a real folder.
+// both work). Otherwise we prefer the folder the bundle lives in, when it's
+// somewhere personal — i.e. the user dropped degu.app or the binary into a
+// media folder under their home dir. /Applications, ~/Applications, and "bin"
+// dirs are excluded so a system or brew install still falls through to the
+// conventional ~/Pictures default. Last resort: ~/, or os.Getwd if home
+// lookup itself fails.
 func resolveRoot(arg string) (string, error) {
 	if arg != "" {
 		abs, err := filepath.Abs(arg)
@@ -119,8 +126,16 @@ func resolveRoot(arg string) (string, error) {
 		}
 		return abs, nil
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
+
+	home, _ := os.UserHomeDir()
+
+	if dir := bundleHomeDir(); dir != "" && isPersonalDir(dir, home) {
+		if info, err := os.Stat(dir); err == nil && info.IsDir() {
+			return dir, nil
+		}
+	}
+
+	if home == "" {
 		return os.Getwd()
 	}
 	pics := filepath.Join(home, "Pictures")
@@ -128,4 +143,62 @@ func resolveRoot(arg string) (string, error) {
 		return pics, nil
 	}
 	return home, nil
+}
+
+// bundleHomeDir returns the directory the running degu binary appears to live
+// in. On macOS that's the directory containing degu.app (we walk up out of
+// degu.app/Contents/MacOS/). On Linux/Windows it's just the directory of the
+// executable. Returns "" if os.Executable fails.
+func bundleHomeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return bundleHomeDirFor(exe)
+}
+
+// bundleHomeDirFor is the path-only half of bundleHomeDir, split so tests can
+// drive it without pinning to the real os.Executable.
+func bundleHomeDirFor(exe string) string {
+	dir := filepath.Dir(exe)
+	if filepath.Base(dir) == "MacOS" {
+		contents := filepath.Dir(dir)
+		if filepath.Base(contents) == "Contents" {
+			bundle := filepath.Dir(contents)
+			if strings.HasSuffix(bundle, ".app") {
+				return filepath.Dir(bundle)
+			}
+		}
+	}
+	return dir
+}
+
+// isPersonalDir reports whether p sits somewhere personal under home — a
+// reasonable default for "the user dropped degu next to their media". Returns
+// false for paths outside home, for home itself, and for Applications- or
+// bin-style directories that suggest a system install.
+func isPersonalDir(p, home string) bool {
+	if home == "" {
+		return false
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return false
+	}
+	homeAbs, err := filepath.Abs(home)
+	if err != nil {
+		return false
+	}
+	rel, err := filepath.Rel(homeAbs, abs)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return false
+	}
+	switch filepath.Base(abs) {
+	case "Applications", "bin", "sbin":
+		return false
+	}
+	return true
 }

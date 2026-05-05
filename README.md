@@ -38,16 +38,18 @@ When running as the desktop app or headless server, the Wails WKWebView / localh
 
 ## Running degu
 
-**Desktop app** (macOS arm64): download `degu.app` from Releases and open it. The default root is `~/Pictures`.
+**Travel-with-files (recommended).** Download the `.app` (macOS), the `degu` binary (Linux), or `degu.exe` (Windows) from [Releases](https://github.com/georgebuilds/degu/releases/latest). Drop it into the folder of media you want to browse and double-click. degu serves that folder — your tags and SQLite DB live next to it, so the whole thing travels as one unit when you move the drive.
 
-**Headless server**:
+If degu can't tell where it lives (you put it in `/Applications`, `/usr/local/bin`, or anywhere outside your home directory), it falls back to `~/Pictures`.
+
+**Or pass an explicit path**:
 ```bash
 degu /path/to/folder          # serves on localhost:7878, opens browser
 degu --no-browser /path       # server only
 degu --port 8080 /path
 ```
 
-**Drop-on-drive**: open `dist/index.html` in a Chromium browser. Pick a folder when prompted. The FSA handle is persisted in IndexedDB; reloads prompt for a single re-grant click.
+**Drop-on-drive (no binary needed).** Open `dist/index.html` in a Chromium browser. Pick a folder when prompted. The FSA handle is persisted in IndexedDB; reloads prompt for a single re-grant click.
 
 ## Development
 

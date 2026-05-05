@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>degu — a media browser that travels with your files</title>
-    <meta name="description" content="A media browser that travels with your files. Drop it on a USB drive or external SSD; plug into another computer and your tags, loops, and thumbnails come along. Nothing in the cloud." />
+    <meta name="description" content="A media browser that travels with your files. Download, drop next to your media, double-click. degu serves that folder — your tags, loops, and thumbnails live next to it. Nothing in the cloud." />
     <link rel="canonical" href="https://georgebuilds.github.io/degu/" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://georgebuilds.github.io/degu/" />
     <meta property="og:title" content="degu — a media browser that travels with your files" />
-    <meta property="og:description" content="Drop it on the drive. Plug into any computer — your tags, loops, and thumbnails travel with the media. Nothing leaves your machine." />
+    <meta property="og:description" content="Download, drop next to your media, double-click. degu serves that folder — your tags, loops, and thumbnails live right next to the files. Nothing leaves your machine." />
     <meta property="og:site_name" content="degu" />
     <meta property="og:image" content="https://georgebuilds.github.io/degu/apple-touch-icon.png" />
     <meta property="og:image:width" content="180" />
@@ -20,7 +20,7 @@
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="degu — a media browser that travels with your files" />
-    <meta name="twitter:description" content="Drop it on the drive. Your tags, loops, and thumbnails travel with the media. Nothing leaves your machine." />
+    <meta name="twitter:description" content="Download, drop next to your media, double-click. Your tags, loops, and thumbnails live right next to the files. Nothing leaves your machine." />
     <meta name="twitter:image" content="https://georgebuilds.github.io/degu/apple-touch-icon.png" />
 
     <meta name="theme-color" content="#0a0f24" />
@@ -708,6 +708,165 @@
         animation: cmd-swap 200ms cubic-bezier(0.22, 0.9, 0.25, 1);
       }
 
+      /* ===== Download cards ===== */
+      .dl-cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        width: min(720px, 92vw);
+      }
+      .dl-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 14px 14px 12px;
+        border: 1px solid var(--frame-strong);
+        background: rgba(5, 7, 21, 0.55);
+        border-radius: 8px;
+        text-align: left;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        transition:
+          border-color 0.15s,
+          background 0.15s,
+          transform 0.15s;
+      }
+      .dl-card.is-suggested {
+        border-color: var(--accent-line);
+        background: rgba(212, 162, 76, 0.06);
+        box-shadow: inset 0 0 0 1px var(--accent-line);
+      }
+      .dl-card-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .dl-card-glyph {
+        font-size: 14px;
+        line-height: 1;
+        color: var(--accent);
+        flex: 0 0 auto;
+      }
+      .dl-card-name {
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--bone);
+      }
+      .dl-card.is-suggested .dl-card-name {
+        color: var(--accent);
+      }
+      .dl-card-arch {
+        margin-left: auto;
+        font-size: 9.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--soft);
+      }
+      .dl-card-asset {
+        font-size: 10.5px;
+        color: var(--muted);
+        line-height: 1.4;
+        word-break: break-all;
+        min-height: 1.4em;
+      }
+      .dl-card-asset .dl-size {
+        color: var(--soft);
+        margin-left: 4px;
+      }
+      .dl-card-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 12px;
+        margin-top: auto;
+        border-radius: 6px;
+        font: inherit;
+        font-size: 12px;
+        text-decoration: none;
+        background: rgba(239, 231, 215, 0.06);
+        color: var(--bone);
+        border: 1px solid var(--frame-strong);
+        transition: all 0.15s;
+      }
+      .dl-card-btn:hover {
+        background: rgba(239, 231, 215, 0.12);
+        border-color: rgba(239, 231, 215, 0.32);
+        transform: translateY(-1px);
+      }
+      .dl-card.is-suggested .dl-card-btn {
+        background: var(--accent);
+        color: #1a1714;
+        border-color: var(--accent);
+        font-weight: 500;
+      }
+      .dl-card.is-suggested .dl-card-btn:hover {
+        filter: brightness(1.08);
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .dl-card-btn .arrow {
+        font-size: 13px;
+        transition: transform 0.18s;
+      }
+      .dl-card-btn:hover .arrow {
+        transform: translateY(2px);
+      }
+      .dl-instruction {
+        font-size: 12.5px;
+        color: var(--bone);
+        line-height: 1.55;
+        max-width: 56ch;
+        text-align: center;
+      }
+      .dl-instruction em {
+        color: var(--muted);
+        font-style: normal;
+      }
+      .dl-instruction .dot {
+        color: var(--accent);
+      }
+      .dl-advanced {
+        font-size: 10.5px;
+        color: var(--soft);
+        letter-spacing: 0.04em;
+        line-height: 1.55;
+        max-width: 64ch;
+        text-align: center;
+        margin-top: 2px;
+        opacity: 0.78;
+      }
+      .dl-advanced code {
+        font-family: inherit;
+        color: var(--muted);
+        background: rgba(5, 7, 21, 0.6);
+        border: 1px solid var(--frame);
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 10px;
+      }
+      .dl-advanced a {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dotted var(--frame-strong);
+        transition: color 0.15s;
+      }
+      .dl-advanced a:hover {
+        color: var(--accent);
+      }
+      .dl-advanced .sep {
+        color: rgba(239, 231, 215, 0.18);
+        margin: 0 6px;
+      }
+
+      @media (max-width: 640px) {
+        .dl-cards {
+          grid-template-columns: 1fr;
+        }
+      }
+
       @media (max-height: 620px) {
         .center {
           gap: 12px;
@@ -790,125 +949,89 @@
       </header>
 
       <main class="center">
-        <span class="badge">lives with your media · drop on the drive · no cloud</span>
+        <span class="badge">drop next to your media · double-click · no cloud</span>
 
         <p class="lede">
           a media browser that travels with your files.<br />
           <em
-            >keep it on the drive — usb, external ssd, anywhere<span class="pipe">·</span>plug into another computer<span class="pipe">·</span>your tags, loops, and thumbnails come along.</em
+            >download<span class="pipe">·</span>drop it next to your media<span class="pipe">·</span>double-click. tags, loops, and thumbnails live right beside the files.</em
           >
         </p>
 
         <div class="install">
-          <div class="detect-line" id="detect-line">
-            <span class="arrow">&gt;</span>
-            <span>target:</span>
-            <span class="seg" id="status-target">macos</span>
-            <span class="sep">·</span>
-            <span class="seg" id="status-detail">arm64</span>
-            <span class="sep">·</span>
-            <span>tool:</span>
-            <span class="seg" id="status-tool">curl</span>
-          </div>
-
-          <div class="tiles" role="tablist" aria-label="install platform">
-            <button
-              class="tile is-active"
-              data-platform="mac"
-              role="tab"
-              aria-selected="true"
-              type="button"
-            >
-              <span class="dot" aria-hidden="true"></span>macos
-            </button>
-            <button
-              class="tile"
-              data-platform="linux"
-              role="tab"
-              aria-selected="false"
-              type="button"
-            >
-              <span class="dot" aria-hidden="true"></span>linux
-            </button>
-            <button
-              class="tile"
-              data-platform="windows"
-              role="tab"
-              aria-selected="false"
-              aria-disabled="true"
-              data-soon
-              type="button"
-            >
-              <span class="dot" aria-hidden="true"></span>windows<span class="soon-tag"> // soon</span>
-            </button>
-            <button
-              class="tile"
-              data-platform="web"
-              role="tab"
-              aria-selected="false"
-              aria-disabled="true"
-              data-soon
-              type="button"
-            >
-              <span class="dot" aria-hidden="true"></span>web<span class="soon-tag"> // soon</span>
-            </button>
-          </div>
-
-          <div class="terminal" role="region" aria-label="install command">
-            <div class="terminal-bar" id="terminal-bar">
-              <div class="title-deco mac-deco" aria-hidden="true">
-                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <div class="dl-cards" role="list" aria-label="downloads">
+            <div class="dl-card" data-platform="mac" role="listitem">
+              <div class="dl-card-head">
+                <span class="dl-card-glyph" aria-hidden="true">◍</span>
+                <span class="dl-card-name">macos</span>
+                <span class="dl-card-arch">arm64</span>
               </div>
-              <div class="title-deco win-deco" aria-hidden="true">
-                <span class="win-btn min">
-                  <svg viewBox="0 0 10 10"><line x1="1" y1="5.5" x2="9" y2="5.5" /></svg>
-                </span>
-                <span class="win-btn max">
-                  <svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" /></svg>
-                </span>
-                <span class="win-btn close">
-                  <svg viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" /></svg>
-                </span>
-              </div>
-              <span class="label" id="terminal-label">~ install</span>
-              <div class="tool-toggle" id="tool-toggle" role="tablist" aria-label="install tool">
-                <button data-tool="curl" class="is-active" type="button" aria-selected="true">curl</button>
-                <button data-tool="wget" type="button" aria-selected="false">wget</button>
-                <button data-tool="irm" type="button" aria-selected="false" style="display:none">irm</button>
-                <button data-tool="iwr" type="button" aria-selected="false" style="display:none">iwr</button>
-              </div>
-            </div>
-            <div class="terminal-body">
-              <span class="prompt" id="terminal-prompt">$</span>
-              <code class="cmd" id="cmd"
-                >curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh</code
+              <div class="dl-card-asset" data-asset>degu.app · latest release</div>
+              <a
+                class="dl-card-btn"
+                data-dl
+                href="https://github.com/georgebuilds/degu/releases/latest"
+                target="_blank"
+                rel="noopener"
               >
-              <button class="copy" id="copy" type="button" aria-label="copy command">copy</button>
+                <span class="arrow">↓</span> <span data-btn-label>download</span>
+              </a>
+            </div>
+
+            <div class="dl-card" data-platform="linux" role="listitem">
+              <div class="dl-card-head">
+                <span class="dl-card-glyph" aria-hidden="true">◌</span>
+                <span class="dl-card-name">linux</span>
+                <span class="dl-card-arch">x86_64</span>
+              </div>
+              <div class="dl-card-asset" data-asset>degu binary · latest release</div>
+              <a
+                class="dl-card-btn"
+                data-dl
+                href="https://github.com/georgebuilds/degu/releases/latest"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="arrow">↓</span> <span data-btn-label>download</span>
+              </a>
+            </div>
+
+            <div class="dl-card" data-platform="windows" role="listitem">
+              <div class="dl-card-head">
+                <span class="dl-card-glyph" aria-hidden="true">▦</span>
+                <span class="dl-card-name">windows</span>
+                <span class="dl-card-arch">x64</span>
+              </div>
+              <div class="dl-card-asset" data-asset>degu.exe · latest release</div>
+              <a
+                class="dl-card-btn"
+                data-dl
+                href="https://github.com/georgebuilds/degu/releases/latest"
+                target="_blank"
+                rel="noopener"
+              >
+                <span class="arrow">↓</span> <span data-btn-label>download</span>
+              </a>
             </div>
           </div>
 
-          <a
-            class="verify"
-            id="verify-link"
-            href="https://georgebuilds.github.io/degu/install.sh"
-            target="_blank"
-            rel="noopener"
-          >inspect install.sh before running</a>
-        </div>
+          <p class="dl-instruction">
+            drop it into the folder you want to browse <span class="dot">·</span> double-click.<br />
+            <em>degu serves that folder — your tags and db live next to it.</em>
+          </p>
 
-        <div class="actions">
-          <a
-            class="btn btn-primary"
-            id="primary-action"
-            href="https://github.com/georgebuilds/degu/releases/latest"
-            target="_blank"
-            rel="noopener"
-          >
-            <span class="arrow">↓</span> <span id="primary-label">download degu.app</span>
-          </a>
-          <a class="btn" href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">
-            <span class="arrow">↗</span> view source
-          </a>
+          <p class="dl-advanced">
+            want it on <code>$PATH</code> instead?
+            <code>curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh</code>
+            <span class="sep">·</span>
+            <a
+              href="https://georgebuilds.github.io/degu/install.sh"
+              target="_blank"
+              rel="noopener"
+            >inspect install.sh</a>
+            <span class="sep">·</span>
+            <a href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">view source</a>
+          </p>
         </div>
 
         <div class="footnote">
@@ -1334,105 +1457,25 @@
         }
       })();
 
-      // ===== INSTALL BUILDER =====
+      // ===== DOWNLOAD CARDS =====
       (() => {
-        const COMMANDS = {
-          mac: {
-            curl: 'curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh',
-            wget: 'wget -qO- https://georgebuilds.github.io/degu/install.sh | sh',
-          },
-          linux: {
-            curl: 'curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh',
-            wget: 'wget -qO- https://georgebuilds.github.io/degu/install.sh | sh',
-          },
-          windows: {
-            irm: 'irm https://georgebuilds.github.io/degu/install.ps1 | iex',
-            iwr: 'iwr https://georgebuilds.github.io/degu/install.ps1 -UseBasicParsing | iex',
-          },
-          web: {
-            curl: 'curl -fsSL https://georgebuilds.github.io/degu/degu.html -o degu.html',
-          },
-        };
-        const TOOLS = {
-          mac: ['curl', 'wget'],
-          linux: ['curl', 'wget'],
-          windows: ['irm', 'iwr'],
-          web: ['curl'],
-        };
-        const STATUS = {
-          mac: { target: 'macos', detail: 'arm64' },
-          linux: { target: 'linux', detail: 'x86_64' },
-          windows: { target: 'windows', detail: 'x64' },
-          web: { target: 'web', detail: '1 file · any chromium' },
-        };
-        const PRIMARY = {
-          mac: {
-            label: 'download degu.app',
-            href: 'https://github.com/georgebuilds/degu/releases/latest',
-            target: '_blank',
-          },
-          linux: {
-            label: 'download degu (linux)',
-            href: 'https://github.com/georgebuilds/degu/releases/latest',
-            target: '_blank',
-          },
-          windows: {
-            label: 'download degu.exe',
-            href: 'https://github.com/georgebuilds/degu/releases/latest',
-            target: '_blank',
-          },
-          web: {
-            label: 'download degu.html',
-            href: 'https://georgebuilds.github.io/degu/degu.html',
-            target: '_self',
-          },
-        };
-        const VERIFY = {
-          mac: {
-            label: 'inspect install.sh before running',
-            href: 'https://georgebuilds.github.io/degu/install.sh',
-            visible: true,
-          },
-          linux: {
-            label: 'inspect install.sh before running',
-            href: 'https://georgebuilds.github.io/degu/install.sh',
-            visible: true,
-          },
-          windows: {
-            label: 'inspect install.ps1 before running',
-            href: 'https://georgebuilds.github.io/degu/install.ps1',
-            visible: true,
-          },
-          web: {
-            label: '',
-            href: '',
-            visible: false,
-          },
-        };
         // Asset name patterns the GitHub Releases API search looks for.
+        // These match the existing release pipeline filenames.
         const RELEASE_PATTERNS = {
           mac: /^degu-v[\d.]+-darwin-arm64\.zip$/,
           linux: /^degu-v[\d.]+-linux-amd64\.tar\.gz$/,
           windows: /^degu-v[\d.]+-windows-amd64\.zip$/,
         };
+        // Generic per-platform fallback labels used when the API is offline,
+        // rate-limited, or yields nothing for that platform.
+        const FALLBACK_ASSET = {
+          mac: 'degu.app · latest release',
+          linux: 'degu binary · latest release',
+          windows: 'degu.exe · latest release',
+        };
+        const RELEASES_LATEST = 'https://github.com/georgebuilds/degu/releases/latest';
 
-        const tilesEl = document.querySelector('.tiles');
-        const tiles = Array.from(tilesEl.querySelectorAll('.tile'));
-        const toolToggle = document.getElementById('tool-toggle');
-        const toolButtons = Array.from(toolToggle.querySelectorAll('button'));
-        const cmdEl = document.getElementById('cmd');
-        const statusTarget = document.getElementById('status-target');
-        const statusDetail = document.getElementById('status-detail');
-        const statusTool = document.getElementById('status-tool');
-        const primaryAction = document.getElementById('primary-action');
-        const primaryLabel = document.getElementById('primary-label');
-        const verifyLink = document.getElementById('verify-link');
-        const terminalBar = document.getElementById('terminal-bar');
-        const terminalLabel = document.getElementById('terminal-label');
-        const terminalPrompt = document.getElementById('terminal-prompt');
-
-        let platform = 'mac';
-        let tool = 'curl';
+        const cards = Array.from(document.querySelectorAll('.dl-card'));
 
         function detectPlatform() {
           const ua = navigator.userAgent || '';
@@ -1443,112 +1486,27 @@
           if (p.includes('mac') || p.includes('darwin')) return 'mac';
           if (p.includes('win')) return 'windows';
           if (p.includes('linux') || p.includes('cros') || p.includes('android')) return 'linux';
-          return 'web';
+          return null;
         }
 
-        function applyTerminalSkin(p) {
-          const isWin = p === 'windows';
-          terminalBar.classList.toggle('win', isWin);
-          terminalLabel.textContent = isWin ? '> install' : '~ install';
-          terminalPrompt.textContent = isWin ? '>' : '$';
-        }
-
-        function setTool(next, animate) {
-          if (!TOOLS[platform].includes(next)) next = TOOLS[platform][0];
-          tool = next;
-          toolButtons.forEach((b) => {
-            const active = b.dataset.tool === tool;
-            b.classList.toggle('is-active', active);
-            b.setAttribute('aria-selected', active ? 'true' : 'false');
+        function highlightSuggested() {
+          const detected = detectPlatform();
+          cards.forEach((c) => {
+            const match = detected && c.dataset.platform === detected;
+            c.classList.toggle('is-suggested', !!match);
           });
-          render(animate);
         }
 
-        function setPlatform(next, animate) {
-          if (!COMMANDS[next]) return;
-          platform = next;
-          tiles.forEach((t) => {
-            const active = t.dataset.platform === platform;
-            t.classList.toggle('is-active', active);
-            t.setAttribute('aria-selected', active ? 'true' : 'false');
-          });
-          // valid tool for new platform
-          if (!TOOLS[platform].includes(tool)) tool = TOOLS[platform][0];
-          // tool toggle visibility — hide when there's only one option
-          const showToggle = TOOLS[platform].length > 1;
-          toolToggle.style.display = showToggle ? '' : 'none';
-          if (showToggle) {
-            toolButtons.forEach((b) => {
-              const visible = TOOLS[platform].includes(b.dataset.tool);
-              b.style.display = visible ? '' : 'none';
-              const active = b.dataset.tool === tool;
-              b.classList.toggle('is-active', active);
-              b.setAttribute('aria-selected', active ? 'true' : 'false');
-            });
-          }
-          applyTerminalSkin(platform);
-          render(animate);
+        function formatBytes(n) {
+          if (!Number.isFinite(n) || n <= 0) return '';
+          if (n >= 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB';
+          if (n >= 1024) return (n / 1024).toFixed(0) + ' KB';
+          return n + ' B';
         }
-
-        function render(animate) {
-          const cmd = COMMANDS[platform][tool];
-          if (animate) {
-            cmdEl.classList.remove('swapping');
-            // force reflow so the animation re-fires
-            void cmdEl.offsetWidth;
-            cmdEl.classList.add('swapping');
-          }
-          cmdEl.textContent = cmd;
-
-          const status = STATUS[platform];
-          statusTarget.textContent = status.target;
-          statusDetail.textContent = status.detail;
-          statusTool.textContent = tool;
-
-          const primary = PRIMARY[platform];
-          primaryAction.href = primary.href;
-          primaryAction.target = primary.target;
-          primaryLabel.textContent = primary.label;
-
-          const verify = VERIFY[platform];
-          if (verify.visible) {
-            verifyLink.style.display = '';
-            verifyLink.href = verify.href;
-            verifyLink.textContent = verify.label;
-          } else {
-            verifyLink.style.display = 'none';
-          }
-        }
-
-        // Tile clicks
-        tiles.forEach((t) => {
-          t.addEventListener('click', () => {
-            if (t.hasAttribute('data-soon')) return;
-            const next = t.dataset.platform;
-            if (next === platform) return;
-            setPlatform(next, true);
-          });
-        });
-
-        // Tool toggle clicks
-        toolButtons.forEach((b) => {
-          b.addEventListener('click', () => {
-            const next = b.dataset.tool;
-            if (next === tool) return;
-            setTool(next, true);
-          });
-        });
-
-        // Auto-detect and apply on load
-        const detected = detectPlatform();
-        setPlatform(detected, false);
 
         // ===== AVAILABILITY (GitHub Releases API) =====
-        // Each platform's tile is "live" by default but the upload pipeline
-        // may not have shipped a binary yet for some of them. We query the
-        // releases API and downgrade tiles without an asset back to "// soon",
-        // and tag the others with their actual latest version. The page works
-        // fine without this — it's a progressive enhancement.
+        // Progressive enhancement: cards already render with a generic
+        // latest-release href, so the page works offline / when rate-limited.
         async function fetchPlatformAvailability() {
           try {
             const r = await fetch(
@@ -1564,7 +1522,12 @@
                 for (const p of ['mac', 'linux', 'windows']) {
                   if (out[p]) continue;
                   if (RELEASE_PATTERNS[p].test(a.name)) {
-                    out[p] = { tag: rel.tag_name, url: a.browser_download_url };
+                    out[p] = {
+                      tag: rel.tag_name,
+                      url: a.browser_download_url,
+                      name: a.name,
+                      size: a.size,
+                    };
                   }
                 }
               }
@@ -1579,52 +1542,36 @@
         function applyAvailability(avail) {
           if (!avail) return;
           for (const p of ['mac', 'linux', 'windows']) {
-            const tile = document.querySelector('.tile[data-platform="' + p + '"]');
-            if (!tile) continue;
+            const card = cards.find((c) => c.dataset.platform === p);
+            if (!card) continue;
             const info = avail[p];
-            const oldSoon = tile.querySelector('.soon-tag');
-            const oldVer = tile.querySelector('.ver-tag');
-            if (oldSoon) oldSoon.remove();
-            if (oldVer) oldVer.remove();
+            const assetEl = card.querySelector('[data-asset]');
+            const dlEl = card.querySelector('[data-dl]');
+            const labelEl = card.querySelector('[data-btn-label]');
             if (info) {
-              tile.removeAttribute('data-soon');
-              tile.removeAttribute('aria-disabled');
-              const ver = document.createElement('span');
-              ver.className = 'ver-tag';
-              ver.textContent = ' · ' + info.tag;
-              tile.appendChild(ver);
-              PRIMARY[p].href = info.url;
+              const sizeText = formatBytes(info.size);
+              assetEl.textContent = info.name;
+              if (sizeText) {
+                const sz = document.createElement('span');
+                sz.className = 'dl-size';
+                sz.textContent = '· ' + sizeText;
+                assetEl.appendChild(document.createTextNode(' '));
+                assetEl.appendChild(sz);
+              }
+              dlEl.href = info.url;
+              if (labelEl) labelEl.textContent = 'download ' + info.tag;
             } else {
-              tile.setAttribute('data-soon', '');
-              tile.setAttribute('aria-disabled', 'true');
-              const soon = document.createElement('span');
-              soon.className = 'soon-tag';
-              soon.textContent = ' // soon';
-              tile.appendChild(soon);
+              // Keep generic fallback; ensure href points at latest release page.
+              assetEl.textContent = FALLBACK_ASSET[p];
+              dlEl.href = RELEASES_LATEST;
+              if (labelEl) labelEl.textContent = 'download';
             }
           }
-          // Re-render so the active platform's primary URL picks up any update.
-          render(false);
         }
 
+        // Initial: highlight the user's likely platform; render cards as-is.
+        highlightSuggested();
         void fetchPlatformAvailability().then(applyAvailability);
-
-        // ===== COPY =====
-        const copyBtn = document.getElementById('copy');
-        copyBtn.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(cmdEl.textContent.trim());
-            const prev = copyBtn.textContent;
-            copyBtn.textContent = '✓ copied';
-            copyBtn.classList.add('copied');
-            setTimeout(() => {
-              copyBtn.textContent = prev;
-              copyBtn.classList.remove('copied');
-            }, 1600);
-          } catch {
-            copyBtn.textContent = '⚠ failed';
-          }
-        });
       })();
     </script>
   </body>

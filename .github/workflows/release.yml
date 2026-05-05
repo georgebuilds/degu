@@ -305,30 +305,32 @@ jobs:
         run: |
           # Build a default body that mentions only the platforms that succeeded.
           BODY="# degu ${TAG}"$'\n\n'
+          BODY+="degu travels with your media. Drop the binary into the folder you want to browse, double-click, and it serves that folder — tags and SQLite DB live next to the binary."$'\n\n'
           if [[ "$MAC_RESULT" == "success" ]]; then
             BODY+="## macOS (Apple Silicon)"$'\n\n'
-            BODY+="1. Download \`degu-${TAG}-darwin-arm64.zip\`."$'\n'
-            BODY+="2. Unzip; drag \`degu.app\` to /Applications."$'\n'
+            BODY+="1. Download \`degu-${TAG}-darwin-arm64.zip\` and unzip it."$'\n'
+            BODY+="2. Drop \`degu.app\` into your media folder and double-click. (Or move it to /Applications for a global install — that flavour defaults to ~/Pictures.)"$'\n'
             BODY+="3. First launch: right-click → **Open** (self-signed; Gatekeeper requires the explicit allow once)."$'\n'
-            BODY+="   Alternatively: \`xattr -dr com.apple.quarantine /Applications/degu.app\`."$'\n\n'
+            BODY+="   Alternatively: \`xattr -dr com.apple.quarantine /path/to/degu.app\`."$'\n\n'
           fi
           if [[ "$LINUX_RESULT" == "success" ]]; then
             BODY+="## Linux (x86_64)"$'\n\n'
-            BODY+="1. Download \`degu-${TAG}-linux-amd64.tar.gz\`."$'\n'
-            BODY+="2. \`tar -xzf degu-${TAG}-linux-amd64.tar.gz && chmod +x degu && ./degu /path/to/folder\`"$'\n'
+            BODY+="1. Download \`degu-${TAG}-linux-amd64.tar.gz\` and \`tar -xzf\` it into your media folder."$'\n'
+            BODY+="2. \`chmod +x degu && ./degu\` — serves the folder it lives in."$'\n'
             BODY+="   Requires \`libgtk-3\` and \`libwebkit2gtk-4.0\` (most distros ship these by default)."$'\n'
             BODY+="   Ubuntu 24.04 / Debian 13 ship \`libwebkit2gtk-4.1\` instead; install a 4.0 back-version package or run from a 22.04-based environment."$'\n\n'
           fi
           if [[ "$WINDOWS_RESULT" == "success" ]]; then
             BODY+="## Windows (x64)"$'\n\n'
-            BODY+="1. Download \`degu-${TAG}-windows-amd64.zip\`."$'\n'
-            BODY+="2. Unzip and run \`degu.exe\`. Requires WebView2 (preinstalled on Windows 11; Edge installs it on 10)."$'\n\n'
+            BODY+="1. Download \`degu-${TAG}-windows-amd64.zip\` and unzip it into your media folder."$'\n'
+            BODY+="2. Double-click \`degu.exe\` — serves the folder it lives in. Requires WebView2 (preinstalled on Windows 11; Edge installs it on 10)."$'\n\n'
           fi
           BODY+="## Headless CLI"$'\n\n'
-          BODY+="\`degu-cli-*\` is the no-window flavour for SSH / serve-and-open-in-any-browser use:"$'\n'
+          BODY+="\`degu-cli-*\` is the no-window flavour for SSH / serve-and-open-in-any-browser use. Drop it next to your media or pass an explicit path:"$'\n'
           BODY+="\`\`\`"$'\n'
           BODY+="chmod +x degu-cli-${TAG}-<platform>"$'\n'
-          BODY+="./degu-cli-${TAG}-<platform> /path/to/folder"$'\n'
+          BODY+="./degu-cli-${TAG}-<platform>             # serves the folder it's in"$'\n'
+          BODY+="./degu-cli-${TAG}-<platform> /some/path  # or specify"$'\n'
           BODY+="\`\`\`"$'\n'
 
           FINAL="${NOTES:-$BODY}"

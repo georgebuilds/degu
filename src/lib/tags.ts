@@ -1,10 +1,9 @@
 import type { TimestampMap, VideoLoop } from './index-json'
-import { buildIndexJsonObject, parseIndexPayload } from './index-json'
+import { getActiveDriver } from './storage-driver'
 
 export type { VideoLoop } from './index-json'
 export { INDEX_META_KEY } from './index-json'
 
-const API_TAGS = '/api/tags'
 const SAVE_DEBOUNCE_MS = 400
 
 /** In-memory tag map: path relative to root → tag list. Null until {@link initTagIndex} completes. */
@@ -21,43 +20,23 @@ let lastReviewedMap: TimestampMap | null = null
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null
 
-async function writeStateToServer(): Promise<void> {
+async function writeStateToBackend(): Promise<void> {
   if (!index) return
-  const payload = buildIndexJsonObject(
-    index,
-    videoLoopsMap ?? {},
-    tagCreatedAtMap ?? {},
-    lastReviewedMap ?? {}
-  )
-  /**
-   * `buildIndexJsonObject` produces the legacy `index.json` shape (top-level
-   * keys are file paths; meta lives under `__degu`). The Go server expects
-   * the flat `{tags, videoLoops, tagCreatedAt, lastReviewed}` shape, so we
-   * unwrap before sending.
-   */
-  const body = JSON.stringify({
+  const driver = getActiveDriver()
+  await driver.saveTags({
     tags: index,
     videoLoops: videoLoopsMap ?? {},
     tagCreatedAt: tagCreatedAtMap ?? {},
     lastReviewed: lastReviewedMap ?? {},
   })
-  void payload
-  const res = await fetch(API_TAGS, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  })
-  if (!res.ok) {
-    throw new Error(`PUT ${API_TAGS} failed: ${res.status}`)
-  }
 }
 
 function scheduleSave(): void {
   if (saveTimer !== null) clearTimeout(saveTimer)
   saveTimer = window.setTimeout(() => {
     saveTimer = null
-    void writeStateToServer().catch(() => {
-      /* write failed; data still in memory */
+    void writeStateToBackend().catch(() => {
+      /* write failed; data still in memory. surfacing is a deferred follow-up */
     })
   }, SAVE_DEBOUNCE_MS)
 }
@@ -70,11 +49,17 @@ export function flushTagIndex(): Promise<void> {
     clearTimeout(saveTimer)
     saveTimer = null
   }
-  return writeStateToServer()
+  return writeStateToBackend()
 }
 
 /**
- * Load the current tag state from the local degu server. Idempotent.
+ * Load the current tag state via the active storage driver. Idempotent.
+ *
+ * Requires `setActiveDriver` to have been called first (the boot sequence in
+ * app.tsx connects the driver before invoking initTagIndex). On load failure
+ * we fall back to an empty in-memory index so the UI keeps functioning; the
+ * deferred follow-up will gate writes when the load failed (today the next
+ * `setTags` would overwrite real data with the empty-loaded state).
  */
 export async function initTagIndex(): Promise<void> {
   if (saveTimer !== null) {
@@ -87,33 +72,12 @@ export async function initTagIndex(): Promise<void> {
   lastReviewedMap = {}
 
   try {
-    const res = await fetch(API_TAGS, { headers: { Accept: 'application/json' } })
-    if (!res.ok) {
-      throw new Error(`GET ${API_TAGS}: ${res.status}`)
-    }
-    const json = (await res.json()) as {
-      tags?: Record<string, string[]>
-      videoLoops?: Record<string, VideoLoop[]>
-      tagCreatedAt?: TimestampMap
-      lastReviewed?: TimestampMap
-    }
-    /**
-     * Re-use the legacy parser to defensively coerce any odd shapes — even
-     * though the server emits clean JSON, this keeps a single normalization
-     * point should the wire format ever drift.
-     */
-    const legacyShaped: Record<string, unknown> = { ...(json.tags ?? {}) }
-    legacyShaped.__degu = {
-      videoLoops: json.videoLoops ?? {},
-      tagCreatedAt: json.tagCreatedAt ?? {},
-      lastReviewed: json.lastReviewed ?? {},
-    }
-    const { tags, videoLoops, tagCreatedAt, lastReviewed } =
-      parseIndexPayload(legacyShaped)
-    index = tags
-    videoLoopsMap = videoLoops
-    tagCreatedAtMap = tagCreatedAt
-    lastReviewedMap = lastReviewed
+    const driver = getActiveDriver()
+    const payload = await driver.loadTags()
+    index = payload.tags
+    videoLoopsMap = payload.videoLoops
+    tagCreatedAtMap = payload.tagCreatedAt
+    lastReviewedMap = payload.lastReviewed
   } catch {
     index = {}
     videoLoopsMap = {}

@@ -1,15 +1,20 @@
 # degu
 
-A local-first media browser that runs entirely in your browser. Pick a folder on disk, then browse, search, tag, preview, A–B-loop, trim, and rename media files without uploading anything.
+A local-first media browser. Browse, search, tag, preview, A–B-loop, trim, and rename media files without uploading anything to the cloud.
 
-There is no backend. degu builds to a single self-contained `index.html`.
+degu runs two ways:
+
+- **Desktop app / server** (primary): a Go server + SQLite database handles the filesystem and tags. Distributed as a native Wails desktop app (macOS) and a cross-platform CLI binary (`degu /path/to/folder`).
+- **Drop-on-drive** (FSA fallback): open `dist/index.html` directly in a Chromium browser. Tags are stored in `index.json` next to your media — no server required.
 
 ## Features
 
-- **Browse** any local folder with list and thumbnail views, breadcrumb navigation, and URL-hash routing (browser Back works).
-- **Tag** images and videos. Tags are stored in `index.json` at the connected root; quick-add chips, a “More” submenu, and bulk multi-select editing are built in.
-- **Preview** images and videos in a modal (keyboard-navigable, with sibling navigation).
-- **A–B loops** for videos: save multiple loop ranges per file and pin them to a side-by-side viewer pane.
+- **Triage**: card-by-card tagging workflow for stale and untagged files — the default mode.
+- **Browse**: list and thumbnail views, breadcrumb navigation, URL-hash routing (browser Back works).
+- **Tag**: images and videos. Quick-add chips, a "More" submenu, and bulk multi-select editing are built in.
+- **Tags screen**: manage your tag vocabulary — counts, creation dates, and stale-file indicators.
+- **Preview**: images and videos in a modal (keyboard-navigable, sibling navigation).
+- **A–B loops**: save multiple loop ranges per video and pin them to a side-by-side viewer pane.
 - **Trim videos** in-browser with `ffmpeg.wasm` (`-c copy`, fast, keyframe-snapped). Output saves to a sibling file or via Save As.
 - **Normalize filenames** in bulk by removing substrings; tag entries follow the rename.
 - **Storage stats**: byte totals broken down by kind, extension, and tag.
@@ -17,36 +22,47 @@ There is no backend. degu builds to a single self-contained `index.html`.
 
 ## Browser support
 
-degu uses the [File System Access API](https://developer.mozilla.org/docs/Web/API/File_System_Access_API) (`showDirectoryPicker`, `FileSystemDirectoryHandle`, `FileSystemFileHandle.move`, `showSaveFilePicker`) and multithreaded `@ffmpeg/core-mt` (which requires cross-origin isolation).
+Drop-on-drive mode uses the [File System Access API](https://developer.mozilla.org/docs/Web/API/File_System_Access_API) (`showDirectoryPicker`, `FileSystemFileHandle.move`, `showSaveFilePicker`) and multithreaded `@ffmpeg/core-mt` (cross-origin isolation required).
 
-**Chromium-based browsers only** (Chrome, Edge, Brave, Arc, etc.). Safari and Firefox do not implement the required APIs.
+**Chromium-based browsers only** for drop-on-drive (Chrome, Edge, Brave, Arc, etc.). Safari and Firefox do not implement the required APIs.
 
-The folder handle is persisted in IndexedDB; reloads prompt for a single click to re-grant `readwrite` permission.
+When running as the desktop app or headless server, the Wails WKWebView / localhost Chromium instance handles these constraints automatically.
 
-## Output
+## Running degu
 
-`npm run build` produces `dist/index.html` with all JS and CSS inlined (`vite-plugin-singlefile`). You can host it on any static server, open it directly from disk in a Chromium browser that allows it, or drop it next to your media library.
+**Desktop app** (macOS arm64): download `degu.app` from Releases and open it. The default root is `~/Pictures`.
 
-The `@ffmpeg/core-mt` WASM core is loaded lazily from a CDN the first time you trim a video.
+**Headless server**:
+```bash
+degu /path/to/folder          # serves on localhost:7878, opens browser
+degu --no-browser /path       # server only
+degu --port 8080 /path
+```
+
+**Drop-on-drive**: open `dist/index.html` in a Chromium browser. Pick a folder when prompted. The FSA handle is persisted in IndexedDB; reloads prompt for a single re-grant click.
 
 ## Development
 
 ```bash
 npm install
-npm run dev          # Vite dev server
+npm run dev          # Vite dev server (FSA mode — no Go server needed)
 npm run build        # tsc -b && vite build → dist/index.html
-npm run preview      # serve the built bundle
+npm run preview      # serve the built SPA bundle
 npm test             # Vitest (run mode)
 npm run test:watch
 ```
 
-Tech: Preact 10, TypeScript, Vite 8, Tailwind CSS v4, Vitest 4 (`@testing-library/preact` + `happy-dom` for component tests), `@ffmpeg/ffmpeg` + `@ffmpeg/core-mt` + `@ffmpeg/util` for video trim.
+Tech: **Preact 10**, **TypeScript**, **Vite 8**, **Tailwind CSS v4**, **Vitest 4** (`@testing-library/preact` + `happy-dom` for component tests), **`@ffmpeg/ffmpeg`** + `@ffmpeg/core-mt` + `@ffmpeg/util` for video trim, **Go 1.25**, **SQLite** (`modernc.org/sqlite`), **Wails v2**.
 
 ## Where things live
 
-- `src/app.tsx` — root, folder handle, tag-index init.
-- `src/components/` — UI: `FileBrowser`, modals, viewer, sidebar, rows.
-- `src/lib/` — pure helpers and File System Access I/O (tags, trim, stats, scans, formatting). Each pure module ships with a sibling `*.test.ts`.
+- `main.go` — Wails desktop entry (macOS arm64)
+- `cmd/degu/` — headless CLI server
+- `internal/server/` — HTTP handler: SPA embed, `/api/*` routes, COOP/COEP headers
+- `internal/db/` — SQLite tag store + legacy `index.json` importer
+- `src/app.tsx` — boot: HTTP driver detection → FSA fallback
+- `src/components/` — UI: AppShell, ModeRail, FileBrowser, TriageScreen, TagsScreen, modals, viewer
+- `src/lib/` — storage drivers, pure helpers, File System Access I/O
 
 ## For AI agent contributors
 

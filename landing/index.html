@@ -271,11 +271,11 @@
         border-bottom: 1px solid var(--frame);
         background: rgba(0, 0, 0, 0.28);
       }
-      .terminal-bar .dot {
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: rgba(239, 231, 215, 0.16);
+      .title-deco {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        order: 1;
       }
       .terminal-bar .label {
         margin-left: 12px;
@@ -283,6 +283,65 @@
         color: var(--soft);
         letter-spacing: 0.12em;
         text-transform: uppercase;
+        order: 2;
+      }
+      .terminal-bar .tool-toggle {
+        order: 3;
+        margin-left: auto;
+      }
+      .terminal-bar .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: rgba(239, 231, 215, 0.16);
+      }
+      .win-deco {
+        display: none;
+        gap: 0;
+      }
+      .win-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 18px;
+        cursor: default;
+        color: var(--soft);
+        transition: background 0.12s, color 0.12s;
+      }
+      .win-btn svg {
+        width: 10px;
+        height: 10px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.2;
+      }
+      .win-btn.min:hover,
+      .win-btn.max:hover {
+        background: rgba(239, 231, 215, 0.08);
+        color: var(--bone);
+      }
+      .win-btn.close:hover {
+        background: #e81123;
+        color: #ffffff;
+      }
+      /* Windows skin: tool toggle moves to the LEFT, win-deco moves to the RIGHT. */
+      .terminal-bar.win .mac-deco {
+        display: none;
+      }
+      .terminal-bar.win .win-deco {
+        display: inline-flex;
+        order: 3;
+        margin-left: auto;
+      }
+      .terminal-bar.win .label {
+        order: 2;
+        margin-left: 0;
+      }
+      .terminal-bar.win .tool-toggle {
+        order: 1;
+        margin-left: 0;
+        margin-right: 12px;
       }
       .terminal-body {
         padding: clamp(14px, 2.4vh, 20px) clamp(14px, 2.4vw, 22px);
@@ -550,15 +609,20 @@
         color: var(--muted);
       }
       .tile .soon-tag,
-      .tile .new-tag {
+      .tile .new-tag,
+      .tile .ver-tag {
         display: inline;
         font-size: 8.5px;
         letter-spacing: 0.16em;
         color: var(--accent);
         opacity: 0.85;
       }
-      .tile.is-active .new-tag {
+      .tile.is-active .new-tag,
+      .tile.is-active .ver-tag {
         opacity: 1;
+      }
+      .tile .ver-tag {
+        font-family: inherit;
       }
       .tool-toggle {
         margin-left: auto;
@@ -740,24 +804,20 @@
             <button
               class="tile"
               data-platform="linux"
-              data-soon
               role="tab"
               aria-selected="false"
-              aria-disabled="true"
               type="button"
             >
-              <span class="dot" aria-hidden="true"></span>linux<span class="soon-tag">// soon</span>
+              <span class="dot" aria-hidden="true"></span>linux
             </button>
             <button
               class="tile"
               data-platform="windows"
-              data-soon
               role="tab"
               aria-selected="false"
-              aria-disabled="true"
               type="button"
             >
-              <span class="dot" aria-hidden="true"></span>windows<span class="soon-tag">// soon</span>
+              <span class="dot" aria-hidden="true"></span>windows
             </button>
             <button
               class="tile"
@@ -771,16 +831,31 @@
           </div>
 
           <div class="terminal" role="region" aria-label="install command">
-            <div class="terminal-bar">
-              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-              <span class="label">~ install</span>
+            <div class="terminal-bar" id="terminal-bar">
+              <div class="title-deco mac-deco" aria-hidden="true">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
+              <div class="title-deco win-deco" aria-hidden="true">
+                <span class="win-btn min">
+                  <svg viewBox="0 0 10 10"><line x1="1" y1="5.5" x2="9" y2="5.5" /></svg>
+                </span>
+                <span class="win-btn max">
+                  <svg viewBox="0 0 10 10"><rect x="1.2" y="1.2" width="7.6" height="7.6" /></svg>
+                </span>
+                <span class="win-btn close">
+                  <svg viewBox="0 0 10 10"><line x1="1" y1="1" x2="9" y2="9" /><line x1="9" y1="1" x2="1" y2="9" /></svg>
+                </span>
+              </div>
+              <span class="label" id="terminal-label">~ install</span>
               <div class="tool-toggle" id="tool-toggle" role="tablist" aria-label="install tool">
                 <button data-tool="curl" class="is-active" type="button" aria-selected="true">curl</button>
                 <button data-tool="wget" type="button" aria-selected="false">wget</button>
+                <button data-tool="irm" type="button" aria-selected="false" style="display:none">irm</button>
+                <button data-tool="iwr" type="button" aria-selected="false" style="display:none">iwr</button>
               </div>
             </div>
             <div class="terminal-body">
-              <span class="prompt">$</span>
+              <span class="prompt" id="terminal-prompt">$</span>
               <code class="cmd" id="cmd"
                 >curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh</code
               >
@@ -1242,21 +1317,43 @@
             curl: 'curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh',
             wget: 'wget -qO- https://georgebuilds.github.io/degu/install.sh | sh',
           },
+          linux: {
+            curl: 'curl -fsSL https://georgebuilds.github.io/degu/install.sh | sh',
+            wget: 'wget -qO- https://georgebuilds.github.io/degu/install.sh | sh',
+          },
+          windows: {
+            irm: 'irm https://georgebuilds.github.io/degu/install.ps1 | iex',
+            iwr: 'iwr https://georgebuilds.github.io/degu/install.ps1 -UseBasicParsing | iex',
+          },
           web: {
             curl: 'curl -fsSL https://georgebuilds.github.io/degu/degu.html -o degu.html',
           },
         };
         const TOOLS = {
           mac: ['curl', 'wget'],
+          linux: ['curl', 'wget'],
+          windows: ['irm', 'iwr'],
           web: ['curl'],
         };
         const STATUS = {
           mac: { target: 'macos', detail: 'arm64' },
+          linux: { target: 'linux', detail: 'x86_64' },
+          windows: { target: 'windows', detail: 'x64' },
           web: { target: 'web', detail: '1 file · any chromium' },
         };
         const PRIMARY = {
           mac: {
             label: 'download degu.app',
+            href: 'https://github.com/georgebuilds/degu/releases/latest',
+            target: '_blank',
+          },
+          linux: {
+            label: 'download degu (linux)',
+            href: 'https://github.com/georgebuilds/degu/releases/latest',
+            target: '_blank',
+          },
+          windows: {
+            label: 'download degu.exe',
             href: 'https://github.com/georgebuilds/degu/releases/latest',
             target: '_blank',
           },
@@ -1272,11 +1369,27 @@
             href: 'https://georgebuilds.github.io/degu/install.sh',
             visible: true,
           },
+          linux: {
+            label: 'inspect install.sh before running',
+            href: 'https://georgebuilds.github.io/degu/install.sh',
+            visible: true,
+          },
+          windows: {
+            label: 'inspect install.ps1 before running',
+            href: 'https://georgebuilds.github.io/degu/install.ps1',
+            visible: true,
+          },
           web: {
             label: '',
             href: '',
             visible: false,
           },
+        };
+        // Asset name patterns the GitHub Releases API search looks for.
+        const RELEASE_PATTERNS = {
+          mac: /^degu-v[\d.]+-darwin-arm64\.zip$/,
+          linux: /^degu-v[\d.]+-linux-amd64\.tar\.gz$/,
+          windows: /^degu-v[\d.]+-windows-amd64\.zip$/,
         };
 
         const tilesEl = document.querySelector('.tiles');
@@ -1290,6 +1403,9 @@
         const primaryAction = document.getElementById('primary-action');
         const primaryLabel = document.getElementById('primary-label');
         const verifyLink = document.getElementById('verify-link');
+        const terminalBar = document.getElementById('terminal-bar');
+        const terminalLabel = document.getElementById('terminal-label');
+        const terminalPrompt = document.getElementById('terminal-prompt');
 
         let platform = 'mac';
         let tool = 'curl';
@@ -1301,8 +1417,16 @@
           if (data && data.platform) p = data.platform.toLowerCase();
           else p = ua.toLowerCase();
           if (p.includes('mac') || p.includes('darwin')) return 'mac';
-          // linux/windows builds aren't shipping yet; default to web for them
+          if (p.includes('win')) return 'windows';
+          if (p.includes('linux') || p.includes('cros') || p.includes('android')) return 'linux';
           return 'web';
+        }
+
+        function applyTerminalSkin(p) {
+          const isWin = p === 'windows';
+          terminalBar.classList.toggle('win', isWin);
+          terminalLabel.textContent = isWin ? '> install' : '~ install';
+          terminalPrompt.textContent = isWin ? '>' : '$';
         }
 
         function setTool(next, animate) {
@@ -1338,6 +1462,7 @@
               b.setAttribute('aria-selected', active ? 'true' : 'false');
             });
           }
+          applyTerminalSkin(platform);
           render(animate);
         }
 
@@ -1393,6 +1518,72 @@
         // Auto-detect and apply on load
         const detected = detectPlatform();
         setPlatform(detected, false);
+
+        // ===== AVAILABILITY (GitHub Releases API) =====
+        // Each platform's tile is "live" by default but the upload pipeline
+        // may not have shipped a binary yet for some of them. We query the
+        // releases API and downgrade tiles without an asset back to "// soon",
+        // and tag the others with their actual latest version. The page works
+        // fine without this — it's a progressive enhancement.
+        async function fetchPlatformAvailability() {
+          try {
+            const r = await fetch(
+              'https://api.github.com/repos/georgebuilds/degu/releases?per_page=30',
+              { headers: { Accept: 'application/vnd.github+json' } }
+            );
+            if (!r.ok) return null;
+            const releases = await r.json();
+            const out = { mac: null, linux: null, windows: null };
+            for (const rel of releases) {
+              if (rel.draft || rel.prerelease) continue;
+              for (const a of rel.assets || []) {
+                for (const p of ['mac', 'linux', 'windows']) {
+                  if (out[p]) continue;
+                  if (RELEASE_PATTERNS[p].test(a.name)) {
+                    out[p] = { tag: rel.tag_name, url: a.browser_download_url };
+                  }
+                }
+              }
+              if (out.mac && out.linux && out.windows) break;
+            }
+            return out;
+          } catch {
+            return null;
+          }
+        }
+
+        function applyAvailability(avail) {
+          if (!avail) return;
+          for (const p of ['mac', 'linux', 'windows']) {
+            const tile = document.querySelector('.tile[data-platform="' + p + '"]');
+            if (!tile) continue;
+            const info = avail[p];
+            const oldSoon = tile.querySelector('.soon-tag');
+            const oldVer = tile.querySelector('.ver-tag');
+            if (oldSoon) oldSoon.remove();
+            if (oldVer) oldVer.remove();
+            if (info) {
+              tile.removeAttribute('data-soon');
+              tile.removeAttribute('aria-disabled');
+              const ver = document.createElement('span');
+              ver.className = 'ver-tag';
+              ver.textContent = ' · ' + info.tag;
+              tile.appendChild(ver);
+              PRIMARY[p].href = info.url;
+            } else {
+              tile.setAttribute('data-soon', '');
+              tile.setAttribute('aria-disabled', 'true');
+              const soon = document.createElement('span');
+              soon.className = 'soon-tag';
+              soon.textContent = ' // soon';
+              tile.appendChild(soon);
+            }
+          }
+          // Re-render so the active platform's primary URL picks up any update.
+          render(false);
+        }
+
+        void fetchPlatformAvailability().then(applyAvailability);
 
         // ===== COPY =====
         const copyBtn = document.getElementById('copy');

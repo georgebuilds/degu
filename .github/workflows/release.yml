@@ -16,29 +16,35 @@ on:
         type: number
         default: 0
       notes:
-        description: Release notes body (optional)
+        description: Release notes body (optional; default uses platform-aware template)
         type: string
         default: ""
+      build_mac:
+        description: Build macOS arm64
+        type: boolean
+        default: true
+      build_linux:
+        description: Build Linux x64
+        type: boolean
+        default: true
+      build_windows:
+        description: Build Windows x64
+        type: boolean
+        default: true
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: macos-14 # Apple Silicon runner — same arch as the artifact.
+  prepare:
+    runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.22"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
 
       - name: Compute and validate tag
         id: tag
@@ -52,8 +58,29 @@ jobs:
             echo "Tag $TAG already exists" >&2
             exit 1
           fi
+          if [[ "${{ inputs.build_mac }}" != "true" && "${{ inputs.build_linux }}" != "true" && "${{ inputs.build_windows }}" != "true" ]]; then
+            echo "At least one platform must be selected" >&2
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  build_mac:
+    needs: prepare
+    if: ${{ inputs.build_mac }}
+    runs-on: macos-14 # Apple Silicon — same arch as the artifact.
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
@@ -61,13 +88,10 @@ jobs:
       - run: npm ci
 
       - name: Build degu.app (macOS arm64)
-        env:
-          VERSION: ${{ steps.tag.outputs.version }}
         run: |
           export PATH="$HOME/go/bin:$PATH"
           wails build -platform darwin/arm64 \
             -ldflags "-s -w -X main.version=${VERSION}"
-          ls -la build/bin/
 
       - name: Verify the bundle
         run: |
@@ -76,62 +100,226 @@ jobs:
           file build/bin/degu.app/Contents/MacOS/degu
           /usr/bin/codesign -dv build/bin/degu.app 2>&1 || true
 
-      - name: Package as zip
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
+      - name: Stage release artifacts
         run: |
-          cd build/bin
+          mkdir -p release
           # `ditto` preserves macOS extended attributes / signatures across
           # the archive boundary in a way `zip -r` doesn't.
-          ditto -c -k --keepParent --sequesterRsrc degu.app "../../degu-${TAG}-darwin-arm64.zip"
-          cd ../..
-          shasum -a 256 "degu-${TAG}-darwin-arm64.zip" > "degu-${TAG}-darwin-arm64.zip.sha256"
-          ls -la degu-${TAG}-*
+          ditto -c -k --keepParent --sequesterRsrc \
+            build/bin/degu.app \
+            "release/degu-${TAG}-darwin-arm64.zip"
+          (cd release && shasum -a 256 "degu-${TAG}-darwin-arm64.zip" \
+            > "degu-${TAG}-darwin-arm64.zip.sha256")
 
-      - name: Build headless CLI
-        env:
-          VERSION: ${{ steps.tag.outputs.version }}
-        run: |
           node scripts/build-embed.mjs
-          mkdir -p bin
           go build -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}" \
-            -o "bin/degu-cli-${{ steps.tag.outputs.tag }}-darwin-arm64" \
+            -o "release/degu-cli-${TAG}-darwin-arm64" \
             ./cmd/degu
-          shasum -a 256 "bin/degu-cli-${{ steps.tag.outputs.tag }}-darwin-arm64" \
-            > "bin/degu-cli-${{ steps.tag.outputs.tag }}-darwin-arm64.sha256"
+          (cd release && shasum -a 256 "degu-cli-${TAG}-darwin-arm64" \
+            > "degu-cli-${TAG}-darwin-arm64.sha256")
+
+          ls -la release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: release/
+
+  build_linux:
+    needs: prepare
+    if: ${{ inputs.build_linux }}
+    runs-on: ubuntu-22.04
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Wails system deps (Linux)
+        # Wails on linux needs gtk3 + webkit2gtk; ubuntu-22.04 ships
+        # libwebkit2gtk-4.0-dev (24.04 renamed to -4.1).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            pkg-config
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - run: npm ci
+
+      - name: Build degu (linux/amd64)
+        run: |
+          export PATH="$HOME/go/bin:$PATH"
+          wails build -platform linux/amd64 \
+            -ldflags "-s -w -X main.version=${VERSION}"
+
+      - name: Verify the binary
+        run: |
+          test -x build/bin/degu
+          file build/bin/degu
+
+      - name: Stage release artifacts
+        run: |
+          mkdir -p release
+          tar -C build/bin -czf \
+            "release/degu-${TAG}-linux-amd64.tar.gz" degu
+          (cd release && sha256sum "degu-${TAG}-linux-amd64.tar.gz" \
+            > "degu-${TAG}-linux-amd64.tar.gz.sha256")
+
+          node scripts/build-embed.mjs
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "release/degu-cli-${TAG}-linux-amd64" \
+            ./cmd/degu
+          (cd release && sha256sum "degu-cli-${TAG}-linux-amd64" \
+            > "degu-cli-${TAG}-linux-amd64.sha256")
+
+          ls -la release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: release/
+
+  build_windows:
+    needs: prepare
+    if: ${{ inputs.build_windows }}
+    runs-on: windows-2022
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        # Use Git Bash so the script reads identically to the unix jobs.
+        # Wails CLI works in either shell on Windows.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+      - run: npm ci
+
+      - name: Build degu.exe (windows/amd64)
+        run: |
+          export PATH="$USERPROFILE/go/bin:$PATH"
+          wails build -platform windows/amd64 \
+            -ldflags "-s -w -X main.version=${VERSION}"
+
+      - name: Verify the binary
+        run: |
+          test -f build/bin/degu.exe
+          file build/bin/degu.exe
+
+      - name: Stage release artifacts
+        run: |
+          mkdir -p release
+          # 7z is preinstalled on the windows-2022 runner.
+          (cd build/bin && 7z a "../../release/degu-${TAG}-windows-amd64.zip" degu.exe)
+          (cd release && sha256sum "degu-${TAG}-windows-amd64.zip" \
+            > "degu-${TAG}-windows-amd64.zip.sha256")
+
+          node scripts/build-embed.mjs
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${VERSION}" \
+            -o "release/degu-cli-${TAG}-windows-amd64.exe" \
+            ./cmd/degu
+          (cd release && sha256sum "degu-cli-${TAG}-windows-amd64.exe" \
+            > "degu-cli-${TAG}-windows-amd64.exe.sha256")
+
+          ls -la release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/
+
+  release:
+    needs: [prepare, build_mac, build_linux, build_windows]
+    # Run the release as long as prepare succeeded and at least one build succeeded.
+    # `always()` keeps us alive past skipped jobs (when their checkbox was off).
+    if: |
+      always() &&
+      needs.prepare.result == 'success' &&
+      (needs.build_mac.result == 'success' ||
+       needs.build_linux.result == 'success' ||
+       needs.build_windows.result == 'success')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      MAC_RESULT: ${{ needs.build_mac.result }}
+      LINUX_RESULT: ${{ needs.build_linux.result }}
+      WINDOWS_RESULT: ${{ needs.build_windows.result }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Inspect artifacts
+        run: find artifacts -type f | sort
 
       - name: Create release
         env:
-          TAG: ${{ steps.tag.outputs.tag }}
           NOTES: ${{ inputs.notes }}
         run: |
-          DEFAULT_BODY=$(cat <<EOF
-          # degu ${TAG}
+          # Build a default body that mentions only the platforms that succeeded.
+          BODY="# degu ${TAG}"$'\n\n'
+          if [[ "$MAC_RESULT" == "success" ]]; then
+            BODY+="## macOS (Apple Silicon)"$'\n\n'
+            BODY+="1. Download \`degu-${TAG}-darwin-arm64.zip\`."$'\n'
+            BODY+="2. Unzip; drag \`degu.app\` to /Applications."$'\n'
+            BODY+="3. First launch: right-click → **Open** (self-signed; Gatekeeper requires the explicit allow once)."$'\n'
+            BODY+="   Alternatively: \`xattr -dr com.apple.quarantine /Applications/degu.app\`."$'\n\n'
+          fi
+          if [[ "$LINUX_RESULT" == "success" ]]; then
+            BODY+="## Linux (x86_64)"$'\n\n'
+            BODY+="1. Download \`degu-${TAG}-linux-amd64.tar.gz\`."$'\n'
+            BODY+="2. \`tar -xzf degu-${TAG}-linux-amd64.tar.gz && chmod +x degu && ./degu /path/to/folder\`"$'\n'
+            BODY+="   Requires \`libgtk-3\` and \`libwebkit2gtk-4.0\` (most distros ship these by default)."$'\n\n'
+          fi
+          if [[ "$WINDOWS_RESULT" == "success" ]]; then
+            BODY+="## Windows (x64)"$'\n\n'
+            BODY+="1. Download \`degu-${TAG}-windows-amd64.zip\`."$'\n'
+            BODY+="2. Unzip and run \`degu.exe\`. Requires WebView2 (preinstalled on Windows 11; Edge installs it on 10)."$'\n\n'
+          fi
+          BODY+="## Headless CLI"$'\n\n'
+          BODY+="\`degu-cli-*\` is the no-window flavour for SSH / serve-and-open-in-any-browser use:"$'\n'
+          BODY+="\`\`\`"$'\n'
+          BODY+="chmod +x degu-cli-${TAG}-<platform>"$'\n'
+          BODY+="./degu-cli-${TAG}-<platform> /path/to/folder"$'\n'
+          BODY+="\`\`\`"$'\n'
 
-          ## macOS (Apple Silicon)
-          1. Download \`degu-${TAG}-darwin-arm64.zip\`.
-          2. Unzip; drag \`degu.app\` to /Applications.
-          3. First launch: right-click → **Open** (the .app is self-signed,
-             not notarized — Gatekeeper requires the explicit allow once).
-             Alternatively: \`xattr -dr com.apple.quarantine /Applications/degu.app\`.
-          4. degu opens to your ~/Pictures folder by default. Pass a path
-             via \`open -a degu --args /path/to/folder\` to scope it elsewhere.
+          FINAL="${NOTES:-$BODY}"
+          gh release create "$TAG" --title "$TAG" --notes "$FINAL"
 
-          ## Headless CLI
-          \`degu-cli-${TAG}-darwin-arm64\` is the no-window flavour for
-          SSH / "serve and open in any browser" use:
-          \`\`\`
-          chmod +x degu-cli-${TAG}-darwin-arm64
-          ./degu-cli-${TAG}-darwin-arm64 /path/to/folder
-          \`\`\`
-          EOF
-          )
-          BODY="${NOTES:-$DEFAULT_BODY}"
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes "$BODY" \
-            "degu-${TAG}-darwin-arm64.zip" \
-            "degu-${TAG}-darwin-arm64.zip.sha256" \
-            "bin/degu-cli-${TAG}-darwin-arm64" \
-            "bin/degu-cli-${TAG}-darwin-arm64.sha256"
+          # Each build job uploads its release/ directory as an artifact named
+          # after the platform; download-artifact lays them out as
+          # artifacts/<platform>/<files>. Glob each platform separately so a
+          # missing one is just a no-op.
+          for plat in mac linux windows; do
+            if compgen -G "artifacts/${plat}/*" > /dev/null; then
+              gh release upload "$TAG" artifacts/${plat}/*
+            fi
+          done

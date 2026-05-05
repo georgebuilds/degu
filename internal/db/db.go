@@ -22,6 +22,10 @@ const DBFilename = "degu.db"
 //go:embed schema.sql
 var schemaFS embed.FS
 
+// currentSchemaVersion is the version we expect after migrate() finishes.
+// Bump this and add a case to migrate() when introducing a new schema rev.
+const currentSchemaVersion = 1
+
 // Open returns a *sql.DB pointing at <dir>/degu.db with sane pragmas
 // (WAL, foreign keys on, busy timeout). The schema is created idempotently.
 func Open(ctx context.Context, dir string) (*sql.DB, error) {
@@ -41,7 +45,6 @@ func Open(ctx context.Context, dir string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db: open %q: %w", path, err)
 	}
-	// One writer; many readers. modernc/sqlite is happy with this.
 	db.SetMaxOpenConns(1)
 
 	if err := db.PingContext(ctx); err != nil {
@@ -49,16 +52,40 @@ func Open(ctx context.Context, dir string) (*sql.DB, error) {
 		return nil, fmt.Errorf("db: ping: %w", err)
 	}
 
-	schema, err := schemaFS.ReadFile("schema.sql")
-	if err != nil {
+	if err := migrate(ctx, db, currentSchemaVersion); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("db: read embedded schema: %w", err)
-	}
-	if _, err := db.ExecContext(ctx, string(schema)); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("db: apply schema: %w", err)
+		return nil, err
 	}
 	return db, nil
+}
+
+// migrate brings the database up to target by stepping through versioned
+// migrations keyed off PRAGMA user_version. v0 means "fresh DB" and is
+// initialised by applying schema.sql.
+func migrate(ctx context.Context, db *sql.DB, target int) error {
+	var version int
+	if err := db.QueryRowContext(ctx, `PRAGMA user_version`).Scan(&version); err != nil {
+		return fmt.Errorf("db: read user_version: %w", err)
+	}
+	for version < target {
+		switch version {
+		case 0:
+			schema, err := schemaFS.ReadFile("schema.sql")
+			if err != nil {
+				return fmt.Errorf("db: read embedded schema: %w", err)
+			}
+			if _, err := db.ExecContext(ctx, string(schema)); err != nil {
+				return fmt.Errorf("db: apply schema: %w", err)
+			}
+		default:
+			return fmt.Errorf("db: no migration registered from v%d", version)
+		}
+		version++
+		if _, err := db.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, version)); err != nil {
+			return fmt.Errorf("db: set user_version=%d: %w", version, err)
+		}
+	}
+	return nil
 }
 
 // IsEmpty reports whether the store has no tag rows yet — used to decide

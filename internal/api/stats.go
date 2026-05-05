@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,6 +55,9 @@ func StatsHandler(root string, d *sql.DB) http.Handler {
 		byPath := make(map[string]fileFact, 256)
 
 		err := filepath.WalkDir(root, func(absPath string, dirEntry os.DirEntry, walkErr error) error {
+			if err := r.Context().Err(); err != nil {
+				return err
+			}
 			if walkErr != nil {
 				if dirEntry != nil && dirEntry.IsDir() {
 					return filepath.SkipDir
@@ -117,26 +121,38 @@ func StatsHandler(root string, d *sql.DB) http.Handler {
 		byTag := map[string]*StatsTagBreakdown{}
 		if d != nil {
 			rows, err := d.QueryContext(r.Context(), `SELECT rel_path, tag FROM file_tag`)
-			if err == nil {
-				for rows.Next() {
-					var path, tag string
-					if err := rows.Scan(&path, &tag); err != nil {
-						break
-					}
-					ff, ok := byPath[path]
-					if !ok {
-						continue
-					}
-					b, exists := byTag[tag]
-					if !exists {
-						b = &StatsTagBreakdown{Tag: tag}
-						byTag[tag] = b
-					}
-					b.Bytes += ff.size
-					b.Files++
-				}
-				rows.Close()
+			if err != nil {
+				log.Printf("api: stats: query file_tag: %v", err)
+				writeJSONError(w, http.StatusInternalServerError, "stats: query tags: "+err.Error())
+				return
 			}
+			for rows.Next() {
+				var path, tag string
+				if err := rows.Scan(&path, &tag); err != nil {
+					rows.Close()
+					log.Printf("api: stats: scan file_tag row: %v", err)
+					writeJSONError(w, http.StatusInternalServerError, "stats: scan tags: "+err.Error())
+					return
+				}
+				ff, ok := byPath[path]
+				if !ok {
+					continue
+				}
+				b, exists := byTag[tag]
+				if !exists {
+					b = &StatsTagBreakdown{Tag: tag}
+					byTag[tag] = b
+				}
+				b.Bytes += ff.size
+				b.Files++
+			}
+			if err := rows.Err(); err != nil {
+				rows.Close()
+				log.Printf("api: stats: iterate file_tag: %v", err)
+				writeJSONError(w, http.StatusInternalServerError, "stats: iterate tags: "+err.Error())
+				return
+			}
+			rows.Close()
 		}
 
 		out := StatsResponse{

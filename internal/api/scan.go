@@ -11,7 +11,7 @@ import (
 
 // ScanEntry mirrors a single file in the recursive listing.
 type ScanEntry struct {
-	Path    string `json:"path"`    // forward-slash relative
+	Path    string `json:"path"` // forward-slash relative
 	Name    string `json:"name"`
 	Size    int64  `json:"size"`
 	ModTime int64  `json:"modTime"` // unix milliseconds
@@ -23,15 +23,19 @@ type ScanResponse struct {
 	Entries []ScanEntry `json:"entries"`
 }
 
-// videoExts and imageExts mirror src/lib/supported-media.ts so the server's
-// idea of "media file" matches the SPA's exactly. Keep these two lists in
-// sync.
+// videoExts, imageExts and audioExts mirror src/lib/supported-media.ts so the
+// server's idea of "media file" matches the SPA's exactly. Keep these lists
+// in sync.
 var videoExts = map[string]struct{}{
 	".mp4": {}, ".m4v": {}, ".webm": {}, ".mov": {}, ".mkv": {}, ".avi": {},
 }
 var imageExts = map[string]struct{}{
 	".jpg": {}, ".jpeg": {}, ".png": {}, ".webp": {},
-	".svg": {}, ".avif": {}, ".gif": {},
+	".svg": {}, ".avif": {}, ".gif": {}, ".heic": {},
+}
+var audioExts = map[string]struct{}{
+	".mp3": {}, ".wav": {}, ".flac": {}, ".ogg": {},
+	".opus": {}, ".aac": {}, ".m4a": {},
 }
 
 func mediaKind(name string) string {
@@ -45,6 +49,22 @@ func mediaKind(name string) string {
 	return ""
 }
 
+// isServableExt reports whether GET /api/file/ is allowed to stream a file
+// with the given (lowercase, leading-dot) extension. Media + index.json only;
+// everything else returns 404 to avoid leaking existence.
+func isServableExt(ext string) bool {
+	if _, ok := videoExts[ext]; ok {
+		return true
+	}
+	if _, ok := imageExts[ext]; ok {
+		return true
+	}
+	if _, ok := audioExts[ext]; ok {
+		return true
+	}
+	return ext == ".json"
+}
+
 // ScanHandler walks root recursively and returns every supported media file
 // as a flat list with size + mtime.
 //
@@ -54,6 +74,9 @@ func ScanHandler(root string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		entries := make([]ScanEntry, 0, 256)
 		err := filepath.WalkDir(root, func(absPath string, d os.DirEntry, walkErr error) error {
+			if err := r.Context().Err(); err != nil {
+				return err
+			}
 			if walkErr != nil {
 				// Permission failures on individual subtrees shouldn't fail
 				// the whole scan — log via response would be noisy, just skip.

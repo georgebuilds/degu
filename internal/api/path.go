@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -22,8 +23,24 @@ func SafeJoin(root, rel string) (string, error) {
 	rel = filepath.FromSlash(rel)
 	abs := filepath.Join(root, rel)
 	cleaned := filepath.Clean(abs)
-	rootClean := filepath.Clean(root) + string(filepath.Separator)
-	if cleaned != filepath.Clean(root) && !strings.HasPrefix(cleaned+string(filepath.Separator), rootClean) {
+	rootClean := filepath.Clean(root)
+	rootPrefix := rootClean + string(filepath.Separator)
+	if cleaned != rootClean && !strings.HasPrefix(cleaned+string(filepath.Separator), rootPrefix) {
+		return "", ErrUnsafePath
+	}
+
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return cleaned, nil
+		}
+		return "", err
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(rootClean)
+	if err != nil {
+		return "", err
+	}
+	if resolved != resolvedRoot && !strings.HasPrefix(resolved+string(filepath.Separator), resolvedRoot+string(filepath.Separator)) {
 		return "", ErrUnsafePath
 	}
 	return cleaned, nil
@@ -46,6 +63,12 @@ func RelFromAbs(root, abs string) (string, error) {
 }
 
 func writeJSONError(w http.ResponseWriter, status int, msg string) {
+	WriteJSONError(w, status, msg)
+}
+
+// WriteJSONError emits the package-standard error envelope; callers outside
+// this package (the server middleware) use this to keep responses uniform.
+func WriteJSONError(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(`{"error":"` + jsonEscape(msg) + `"}`))

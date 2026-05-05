@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/georgebuilds/degu/internal/api"
@@ -13,6 +14,14 @@ type Config struct {
 	Root    string
 	Version string
 	DB      *sql.DB
+	// Port is the loopback port the CLI is listening on. Used to validate
+	// Origin/Host headers against http://localhost:<port> and
+	// http://127.0.0.1:<port>. Ignored when EnableOriginGuard is false.
+	Port int
+	// EnableOriginGuard turns on the Origin/Host CSRF + DNS-rebinding guard
+	// for /api/* routes. The Wails desktop binary leaves this false because
+	// it serves through an in-process AssetServer that never sees the network.
+	EnableOriginGuard bool
 }
 
 type Server struct {
@@ -24,7 +33,6 @@ type Server struct {
 func New(cfg Config) *Server {
 	sub, err := fs.Sub(staticFS, "static")
 	if err != nil {
-		// staticFS is embedded at compile time; this should be unreachable.
 		panic("server: cannot open embedded static FS: " + err.Error())
 	}
 	_, indexErr := fs.Stat(sub, "index.html")
@@ -38,29 +46,31 @@ func New(cfg Config) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, _ *http.Request) {
+	apiMux := http.NewServeMux()
+
+	apiMux.HandleFunc("GET /api/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 
-	mux.HandleFunc("GET /api/info", func(w http.ResponseWriter, _ *http.Request) {
+	apiMux.HandleFunc("GET /api/info", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"version":"` + jsonEscape(s.cfg.Version) + `","root":"` + jsonEscape(s.cfg.Root) + `"}`))
 	})
 
 	if s.cfg.DB != nil {
-		mux.Handle("/api/tags", api.TagsHandler(s.cfg.DB))
-		mux.Handle("/api/scan", api.ScanHandler(s.cfg.Root))
-		mux.Handle("/api/stats", api.StatsHandler(s.cfg.Root, s.cfg.DB))
-		mux.Handle("/api/file/", api.FileHandler(s.cfg.Root))
-		mux.Handle("/api/thumb/", api.ThumbHandler(s.cfg.Root))
-		mux.Handle("/api/save/", api.SaveHandler(s.cfg.Root))
-		mux.Handle("/api/move", api.MoveHandler(s.cfg.Root, s.cfg.DB))
-		mux.Handle("/api/move/", api.MoveHandler(s.cfg.Root, s.cfg.DB))
+		apiMux.Handle("/api/tags", methodGate(api.TagsHandler(s.cfg.DB), http.MethodGet, http.MethodPut))
+		apiMux.Handle("/api/scan", methodGate(api.ScanHandler(s.cfg.Root), http.MethodGet))
+		apiMux.Handle("/api/stats", methodGate(api.StatsHandler(s.cfg.Root, s.cfg.DB), http.MethodGet))
+		apiMux.Handle("/api/file/", methodGate(api.FileHandler(s.cfg.Root, s.cfg.DB), http.MethodGet, http.MethodHead, http.MethodDelete))
+		apiMux.Handle("/api/thumb/", methodGate(api.ThumbHandler(s.cfg.Root), http.MethodGet, http.MethodHead))
+		apiMux.Handle("/api/save/", methodGate(api.SaveHandler(s.cfg.Root), http.MethodPut, http.MethodPost))
+		apiMux.Handle("/api/move", methodGate(api.MoveHandler(s.cfg.Root, s.cfg.DB), http.MethodPost))
+		apiMux.Handle("/api/move/", methodGate(api.MoveHandler(s.cfg.Root, s.cfg.DB), http.MethodPost))
 	}
 
-	// Everything else: serve the embedded SPA bundle (or placeholder when
-	// the frontend hasn't been built yet).
+	mux.Handle("/api/", s.originGuard(apiMux))
+
 	if s.bundleReady {
 		mux.Handle("/", s.static)
 	} else {
@@ -68,6 +78,71 @@ func (s *Server) Handler() http.Handler {
 	}
 
 	return crossOriginIsolation(noCacheHTML(mux))
+}
+
+// originGuard rejects /api/* requests whose Origin or Host headers don't match
+// the loopback bindings, defending against malicious cross-origin browser tabs
+// (CSRF) and DNS-rebinding attacks. Wails desktop wires EnableOriginGuard=false
+// because its in-process AssetServer never sees the network.
+func (s *Server) originGuard(next http.Handler) http.Handler {
+	if !s.cfg.EnableOriginGuard {
+		return next
+	}
+	port := strconv.Itoa(s.cfg.Port)
+	allowedHosts := map[string]struct{}{
+		"localhost:" + port: {},
+		"127.0.0.1:" + port: {},
+	}
+	allowedOrigins := map[string]struct{}{
+		"http://localhost:" + port: {},
+		"http://127.0.0.1:" + port: {},
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := allowedHosts[r.Host]; !ok {
+			api.WriteJSONError(w, http.StatusForbidden, "forbidden host")
+			return
+		}
+		if site := r.Header.Get("Sec-Fetch-Site"); site == "cross-site" {
+			api.WriteJSONError(w, http.StatusForbidden, "forbidden cross-site request")
+			return
+		}
+		if isUnsafeMethod(r.Method) {
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				api.WriteJSONError(w, http.StatusForbidden, "missing Origin")
+				return
+			}
+			if _, ok := allowedOrigins[origin]; !ok {
+				api.WriteJSONError(w, http.StatusForbidden, "forbidden origin")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func isUnsafeMethod(m string) bool {
+	switch m {
+	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+		return true
+	}
+	return false
+}
+
+func methodGate(h http.Handler, allowed ...string) http.Handler {
+	allow := strings.Join(allowed, ", ")
+	set := make(map[string]struct{}, len(allowed))
+	for _, m := range allowed {
+		set[m] = struct{}{}
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := set[r.Method]; !ok {
+			w.Header().Set("Allow", allow)
+			api.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 // crossOriginIsolation sets the COOP+COEP+CORP headers required by

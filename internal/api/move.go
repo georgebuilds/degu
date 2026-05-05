@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 )
@@ -122,22 +123,42 @@ func applyMoves(ctx context.Context, root string, d *sql.DB, moves []MoveRequest
 	}
 	defer updateLoops.Close()
 
+	type renamed struct{ from, to string }
+	var done []renamed
+	rollbackRenames := func() {
+		for i := len(done) - 1; i >= 0; i-- {
+			r := done[i]
+			if err := os.Rename(r.to, r.from); err != nil {
+				log.Printf("api: move: compensating rename %q -> %q failed: %v", r.to, r.from, err)
+			}
+		}
+	}
+
 	for _, p := range plans {
 		if err := os.Rename(p.fromAbs, p.toAbs); err != nil {
+			rollbackRenames()
 			return err
 		}
+		done = append(done, renamed{from: p.fromAbs, to: p.toAbs})
 		if _, err := updateTags.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
+			rollbackRenames()
 			return err
 		}
 		if _, err := updateReviewed.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
+			rollbackRenames()
 			return err
 		}
 		if _, err := updateLoops.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
+			rollbackRenames()
 			return err
 		}
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		rollbackRenames()
+		return err
+	}
+	return nil
 }
 
 // itoa: small int → string without pulling strconv on the hot path.

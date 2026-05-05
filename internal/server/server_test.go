@@ -1,11 +1,20 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/georgebuilds/degu/internal/db"
 )
+
+func writeFile(dir, name, body string) error {
+	return os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644)
+}
 
 func TestHealthz(t *testing.T) {
 	srv := New(Config{Root: "/tmp", Version: "test"})
@@ -55,6 +64,92 @@ func TestRootServesHTML(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "<html") {
 		t.Errorf("body should contain html element")
+	}
+}
+
+func TestOriginGuardRejectsMissingOriginOnDelete(t *testing.T) {
+	dir := t.TempDir()
+	d, err := db.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	srv := New(Config{Root: dir, Version: "test", DB: d, Port: 7878, EnableOriginGuard: true})
+	h := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/file/x.jpg", nil)
+	req.Host = "127.0.0.1:7878"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("missing-Origin DELETE: got %d, want 403", rec.Code)
+	}
+}
+
+func TestOriginGuardRejectsForeignOriginOnDelete(t *testing.T) {
+	dir := t.TempDir()
+	d, err := db.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	srv := New(Config{Root: dir, Version: "test", DB: d, Port: 7878, EnableOriginGuard: true})
+	h := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/file/x.jpg", nil)
+	req.Host = "127.0.0.1:7878"
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("foreign-Origin DELETE: got %d, want 403", rec.Code)
+	}
+}
+
+func TestOriginGuardAllowsLoopbackOriginOnDelete(t *testing.T) {
+	dir := t.TempDir()
+	d, err := db.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	if err := writeFile(dir, "x.jpg", "hello"); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := New(Config{Root: dir, Version: "test", DB: d, Port: 7878, EnableOriginGuard: true})
+	h := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/file/x.jpg", nil)
+	req.Host = "127.0.0.1:7878"
+	req.Header.Set("Origin", "http://127.0.0.1:7878")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("loopback-Origin DELETE: got %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOriginGuardRejectsForeignHost(t *testing.T) {
+	dir := t.TempDir()
+	d, err := db.Open(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	srv := New(Config{Root: dir, Version: "test", DB: d, Port: 7878, EnableOriginGuard: true})
+	h := srv.Handler()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/healthz", nil)
+	req.Host = "evil.example"
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("foreign-Host GET: got %d, want 403", rec.Code)
 	}
 }
 

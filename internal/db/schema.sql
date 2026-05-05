@@ -7,13 +7,7 @@
 --   - video_loop      — saved A–B loop ranges per video file
 --
 -- All paths are stored as forward-slash relative paths under the server root.
-
-CREATE TABLE IF NOT EXISTS schema_meta (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-
-INSERT OR IGNORE INTO schema_meta (key, value) VALUES ('schema_version', '1');
+-- Schema version is tracked via PRAGMA user_version (see internal/db/db.go).
 
 CREATE TABLE IF NOT EXISTS file_tag (
   rel_path TEXT NOT NULL,
@@ -21,6 +15,7 @@ CREATE TABLE IF NOT EXISTS file_tag (
   PRIMARY KEY (rel_path, tag)
 );
 CREATE INDEX IF NOT EXISTS file_tag_tag_idx ON file_tag(tag);
+CREATE INDEX IF NOT EXISTS idx_file_tag_rel_path ON file_tag(rel_path);
 
 CREATE TABLE IF NOT EXISTS tag_created_at (
   tag        TEXT PRIMARY KEY,

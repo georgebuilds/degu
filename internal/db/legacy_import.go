@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 )
@@ -60,6 +61,7 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 		return nil, err
 	}
 	state := Empty()
+	skipped := 0
 
 	const metaKey = "__degu"
 	for k, v := range top {
@@ -68,9 +70,7 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 		}
 		var tags []string
 		if err := json.Unmarshal(v, &tags); err != nil {
-			// Tolerate malformed top-level entries — skip rather than fail the
-			// whole import; a misshaped key blocks the user from getting the
-			// rest of their data.
+			skipped++
 			continue
 		}
 		clean := tags[:0]
@@ -97,6 +97,8 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 					for _, l := range loops {
 						if l.ID != "" && l.EndSec > l.StartSec {
 							keep = append(keep, l)
+						} else {
+							skipped++
 						}
 					}
 					if len(keep) > 0 {
@@ -121,5 +123,8 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 		}
 	}
 
+	if skipped > 0 {
+		log.Printf("importer: skipped %d malformed entries", skipped)
+	}
 	return state, nil
 }

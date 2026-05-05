@@ -1,8 +1,11 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"io/fs"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -17,7 +20,10 @@ import (
 //
 // Mounted at /api/file/, the path tail is treated as a forward-slash relative
 // path inside root; URL-decoding is performed by net/http before we see it.
-func FileHandler(root string) http.Handler {
+//
+// The db handle is used on DELETE to clean up tag rows that referenced the
+// removed path; passing nil disables that cleanup.
+func FileHandler(root string, d *sql.DB) http.Handler {
 	const prefix = "/api/file/"
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rel := trimAPIPrefix(r, prefix)
@@ -32,16 +38,17 @@ func FileHandler(root string) http.Handler {
 		}
 
 		if r.Method == http.MethodDelete {
-			if err := os.Remove(abs); err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					writeJSONError(w, http.StatusNotFound, "file: "+rel)
-					return
-				}
-				writeJSONError(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"ok":true}`))
+			handleFileDelete(r, w, d, abs, rel)
+			return
+		}
+
+		base := strings.ToLower(filepath.Base(abs))
+		if strings.HasPrefix(base, "degu.db") {
+			writeJSONError(w, http.StatusNotFound, "file: "+rel)
+			return
+		}
+		if !isServableExt(strings.ToLower(filepath.Ext(abs))) {
+			writeJSONError(w, http.StatusNotFound, "file: "+rel)
 			return
 		}
 
@@ -80,6 +87,59 @@ func FileHandler(root string) http.Handler {
 
 		http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 	})
+}
+
+// handleFileDelete removes a file (or empty directory) and best-effort drops
+// any tag/review/loop rows that referenced its rel_path.
+func handleFileDelete(r *http.Request, w http.ResponseWriter, d *sql.DB, abs, rel string) {
+	info, err := os.Lstat(abs)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "file: "+rel)
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	isDir := info.IsDir()
+	if err := os.Remove(abs); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSONError(w, http.StatusNotFound, "file: "+rel)
+			return
+		}
+		if isDir {
+			writeJSONError(w, http.StatusConflict, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	if d != nil {
+		if err := deleteTagRowsForPath(r.Context(), d, rel, isDir); err != nil {
+			log.Printf("api: file delete: cleanup tag rows for %q: %v", rel, err)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(`{"ok":true}`))
+}
+
+func deleteTagRowsForPath(ctx context.Context, d *sql.DB, rel string, isDir bool) error {
+	tables := []string{"file_tag", "last_reviewed", "video_loop"}
+	for _, table := range tables {
+		if _, err := d.ExecContext(ctx, "DELETE FROM "+table+" WHERE rel_path = ?", rel); err != nil {
+			return err
+		}
+		if isDir {
+			prefix := strings.TrimSuffix(rel, "/") + "/"
+			if _, err := d.ExecContext(ctx, "DELETE FROM "+table+" WHERE rel_path LIKE ? || '%'", prefix); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // mimeByExt returns a content-type or "" when we don't have a guess; we

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -65,15 +66,30 @@ func main() {
 		log.Fatalf("degu: %v", err)
 	}
 
+	_, portStr, err := net.SplitHostPort(addr)
+	if err != nil {
+		log.Fatalf("degu: split addr %q: %v", addr, err)
+	}
+	boundPort, err := strconv.Atoi(portStr)
+	if err != nil {
+		log.Fatalf("degu: parse port %q: %v", portStr, err)
+	}
+
 	srv := server.New(server.Config{
-		Root:    root,
-		Version: buildVersion(),
-		DB:      store,
+		Root:              root,
+		Version:           buildVersion(),
+		DB:                store,
+		Port:              boundPort,
+		EnableOriginGuard: true,
 	})
 
 	httpServer := &http.Server{
 		Handler:           srv.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	url := fmt.Sprintf("http://%s/", addr)

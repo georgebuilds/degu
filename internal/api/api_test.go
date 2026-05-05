@@ -73,7 +73,7 @@ func TestScanReturnsOnlyMedia(t *testing.T) {
 
 func TestFileServesContent(t *testing.T) {
 	root := fixtureRoot(t)
-	srv := httptest.NewServer(FileHandler(root))
+	srv := httptest.NewServer(FileHandler(root, nil))
 	defer srv.Close()
 
 	res, err := srv.Client().Get(srv.URL + "/api/file/a.jpg")
@@ -92,7 +92,7 @@ func TestFileServesContent(t *testing.T) {
 
 func TestFileSubdirectoryAndRange(t *testing.T) {
 	root := fixtureRoot(t)
-	srv := httptest.NewServer(FileHandler(root))
+	srv := httptest.NewServer(FileHandler(root, nil))
 	defer srv.Close()
 
 	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/file/sub/clip.mp4", nil)
@@ -119,7 +119,7 @@ func TestFileRejectsTraversal(t *testing.T) {
 	}
 	defer os.Remove(parentSecret)
 
-	srv := httptest.NewServer(FileHandler(root))
+	srv := httptest.NewServer(FileHandler(root, nil))
 	defer srv.Close()
 
 	res, err := srv.Client().Get(srv.URL + "/api/file/../" + filepath.Base(parentSecret))
@@ -302,6 +302,80 @@ func TestStatsBreakdowns(t *testing.T) {
 	}
 	if tagBytes["family"] == 0 || tagBytes["trip"] == 0 {
 		t.Errorf("byTag missing rows: %+v", got.ByTag)
+	}
+}
+
+func TestSafeJoinRejectsSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(filepath.Dir(root), "outside-secret.txt")
+	if err := os.WriteFile(target, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(target)
+
+	link := filepath.Join(root, "link.jpg")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unsupported in this environment: %v", err)
+	}
+
+	if _, err := SafeJoin(root, "link.jpg"); err == nil {
+		t.Fatal("SafeJoin should reject path that resolves through a symlink to outside root")
+	}
+}
+
+func TestSafeJoinAllowsNonExistent(t *testing.T) {
+	root := t.TempDir()
+	got, err := SafeJoin(root, "future/save.mp4")
+	if err != nil {
+		t.Fatalf("SafeJoin on non-existent path: got %v, want nil", err)
+	}
+	want := filepath.Join(root, "future", "save.mp4")
+	if got != want {
+		t.Fatalf("SafeJoin: got %q, want %q", got, want)
+	}
+}
+
+func TestMovePartialFailureRollsBackRenames(t *testing.T) {
+	root := t.TempDir()
+	d, err := db.Open(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	if err := os.WriteFile(filepath.Join(root, "a.jpg"), []byte("A"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "b.jpg"), []byte("B"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "blocker.jpg"), []byte("X"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(MoveHandler(root, d))
+	defer srv.Close()
+
+	body := bytes.NewBufferString(`{"moves":[
+		{"from":"a.jpg","to":"a-renamed.jpg"},
+		{"from":"b.jpg","to":"blocker.jpg"}
+	]}`)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/move/batch", body)
+	req.Header.Set("Content-Type", "application/json")
+	res, err := srv.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode == http.StatusOK {
+		t.Fatalf("expected non-200 for failing batch, got 200")
+	}
+
+	if _, err := os.Stat(filepath.Join(root, "a.jpg")); err != nil {
+		t.Errorf("a.jpg should have been restored after partial failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "a-renamed.jpg")); !os.IsNotExist(err) {
+		t.Errorf("a-renamed.jpg should not exist after rollback (err=%v)", err)
 	}
 }
 

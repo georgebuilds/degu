@@ -34,10 +34,10 @@ build/bin/
 frontend/
 
 # Runtime SQLite store written next to whatever folder degu is rooted at.
-degu.db
-degu.db-shm
-degu.db-wal
-degu.db-journal
+**/degu.db
+**/degu.db-shm
+**/degu.db-wal
+**/degu.db-journal
 
 # Claude Code agent state (worktrees, local settings, preview launch config)
 .claude/

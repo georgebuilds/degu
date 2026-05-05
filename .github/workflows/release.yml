@@ -35,6 +35,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ inputs.major }}.${{ inputs.minor }}.${{ inputs.patch }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -79,18 +83,23 @@ jobs:
           go-version-file: "go.mod"
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
       - run: npm ci
+
+      - name: Sync wails.json productVersion
+        run: |
+          jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
 
       - name: Build degu.app (macOS arm64)
         run: |
           export PATH="$HOME/go/bin:$PATH"
-          wails build -platform darwin/arm64 \
+          wails build -platform darwin/arm64 -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Verify the bundle
@@ -140,7 +149,7 @@ jobs:
           go-version-file: "go.mod"
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install Wails system deps (Linux)
@@ -154,14 +163,19 @@ jobs:
             pkg-config
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
       - run: npm ci
+
+      - name: Sync wails.json productVersion
+        run: |
+          jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
 
       - name: Build degu (linux/amd64)
         run: |
           export PATH="$HOME/go/bin:$PATH"
-          wails build -platform linux/amd64 \
+          wails build -platform linux/amd64 -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Verify the binary
@@ -211,18 +225,23 @@ jobs:
           go-version-file: "go.mod"
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
       - run: npm ci
+
+      - name: Sync wails.json productVersion
+        run: |
+          jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > wails.json.tmp
+          mv wails.json.tmp wails.json
 
       - name: Build degu.exe (windows/amd64)
         run: |
           export PATH="$USERPROFILE/go/bin:$PATH"
-          wails build -platform windows/amd64 \
+          wails build -platform windows/amd64 -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}"
 
       - name: Verify the binary
@@ -297,7 +316,8 @@ jobs:
             BODY+="## Linux (x86_64)"$'\n\n'
             BODY+="1. Download \`degu-${TAG}-linux-amd64.tar.gz\`."$'\n'
             BODY+="2. \`tar -xzf degu-${TAG}-linux-amd64.tar.gz && chmod +x degu && ./degu /path/to/folder\`"$'\n'
-            BODY+="   Requires \`libgtk-3\` and \`libwebkit2gtk-4.0\` (most distros ship these by default)."$'\n\n'
+            BODY+="   Requires \`libgtk-3\` and \`libwebkit2gtk-4.0\` (most distros ship these by default)."$'\n'
+            BODY+="   Ubuntu 24.04 / Debian 13 ship \`libwebkit2gtk-4.1\` instead; install a 4.0 back-version package or run from a 22.04-based environment."$'\n\n'
           fi
           if [[ "$WINDOWS_RESULT" == "success" ]]; then
             BODY+="## Windows (x64)"$'\n\n'
@@ -320,6 +340,6 @@ jobs:
           # missing one is just a no-op.
           for plat in mac linux windows; do
             if compgen -G "artifacts/${plat}/*" > /dev/null; then
-              gh release upload "$TAG" artifacts/${plat}/*
+              gh release upload "$TAG" artifacts/${plat}/* --clobber
             fi
           done

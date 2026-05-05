@@ -6,7 +6,7 @@ A local-first media browser. Browse, search, tag, preview, A–B-loop, trim, and
 
 degu runs two ways:
 
-- **Desktop app / server** (primary): a Go server + SQLite database handles the filesystem and tags. Distributed as a native Wails desktop app (macOS) and a cross-platform CLI binary (`degu /path/to/folder`).
+- **Desktop app / server** (primary): a Go server + SQLite database handles the filesystem and tags. Distributed as a native Wails desktop app (macOS arm64; Linux x64 and Windows x64 GUI builds are experimental) and a cross-platform CLI binary (`degu /path/to/folder`).
 - **Drop-on-drive** (FSA fallback): open `dist/index.html` directly in a Chromium browser. Tags are stored in `index.json` next to your media — no server required.
 
 ## Screenshots

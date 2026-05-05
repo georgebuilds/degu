@@ -1,6 +1,6 @@
 # Contributing to degu
 
-Thanks for your interest in contributing. degu is a local-first media browser SPA (Preact + Vite + TypeScript) with no backend.
+Thanks for your interest in contributing. degu is a local-first media browser that runs in two modes: a Go HTTP server with a SQLite primary store (Wails desktop app + headless CLI), and a File System Access fallback that opens the same Preact + Vite + TypeScript SPA directly from `dist/index.html`.
 
 ## Dev setup
 

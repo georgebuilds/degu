@@ -7,6 +7,12 @@ degu runs two ways:
 - **Desktop app / server** (primary): a Go server + SQLite database handles the filesystem and tags. Distributed as a native Wails desktop app (macOS) and a cross-platform CLI binary (`degu /path/to/folder`).
 - **Drop-on-drive** (FSA fallback): open `dist/index.html` directly in a Chromium browser. Tags are stored in `index.json` next to your media — no server required.
 
+## Screenshots
+
+| Triage | Library | Tags |
+|--------|---------|------|
+| ![Triage — card-by-card tagging of stale and untagged files](docs/screenshots/triage.png) | ![Library — thumbnail browser with tag sidebar](docs/screenshots/library.png) | ![Tags — vocabulary manager with counts and stale-file alerts](docs/screenshots/tags.png) |
+
 ## Features
 
 - **Triage**: card-by-card tagging workflow for stale and untagged files — the default mode.

@@ -228,10 +228,29 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
-      # Sign the Authenticode of `degu.exe` and `degu-cli-*.exe` via Azure
-      # Trusted Signing if the five AZURE_* secrets are configured. If they
-      # aren't, signing steps are skipped and the binaries ship unsigned —
-      # this keeps the workflow runnable in forks / before signing is set up.
+      # ====================================================================
+      # Windows Authenticode signing — Azure Trusted Signing
+      # ====================================================================
+      # Sign degu.exe (Wails GUI) and degu-cli-*.exe (headless) if the five
+      # AZURE_* secrets are configured. Without them every sign/verify step
+      # below skips with a warning and the binaries ship unsigned, so this
+      # workflow stays runnable in forks and before signing is provisioned.
+      #
+      # Required setup on the Azure side (do this once, then forget):
+      #   1. Trusted Signing Account — any region; we hard-code the East US
+      #      endpoint below to match the account.
+      #   2. Certificate Profile — Public Trust, tied to a verified
+      #      Microsoft Partner Center publisher identity.
+      #   3. App Registration / Service Principal — generate a client secret.
+      #   4. RBAC: assign role `Trusted Signing Certificate Profile Signer`
+      #      to the SP, scoped to the account (or the specific profile).
+      #      Without this assignment the sign call returns HTTP 403 even
+      #      though authentication itself succeeds.
+      #   5. Add five repo secrets: AZURE_TENANT_ID, AZURE_CLIENT_ID,
+      #      AZURE_CLIENT_SECRET, AZURE_SIGNING_ACCOUNT (account name, not
+      #      ARM ID), AZURE_CERTIFICATE_PROFILE (profile name).
+      #
+      # Per-step gotchas are noted inline below.
       - name: Detect Azure signing config
         id: signing
         env:
@@ -284,14 +303,33 @@ jobs:
           endpoint: https://eus.codesigning.azure.net/
           trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
           certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          # Path validator in the action rejects non-rooted paths; anchor on
+          # github.workspace. files-folder + filter is preferred over `files`
+          # so build/bin can grow new artifacts without editing the workflow.
           files-folder: ${{ github.workspace }}/build/bin
           files-folder-filter: exe
           files-folder-recurse: false
           file-digest: SHA256
+          # Use Microsoft's RFC-3161 TSA bundled with Trusted Signing —
+          # other public TSAs (DigiCert, Sectigo, etc.) reject Trusted
+          # Signing's short-lived leaf certificates.
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
+          # GOTCHA: do NOT add other `exclude-*-credential: true` flags.
+          # The action passes our SP secrets to signtool by setting the
+          # AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET env
+          # vars, which `EnvironmentCredential` reads. Excluding it forces
+          # DefaultAzureCredential to fall through to AzureDeveloperCli /
+          # interactive flows, which fail on the runner with
+          # "Azure Developer CLI could not be found." Only the interactive
+          # browser credential is meaningful to disable for CI.
           exclude-interactive-browser-credential: true
 
+      # Verify the signature we just applied. The signtool exit code alone
+      # is not trustworthy — Andora's parallel macOS path caught silent
+      # fall-back-to-ad-hoc-signing this way; same lesson applies here.
+      # `Status: Valid` requires a verifiable cert chain AND an embedded
+      # RFC-3161 timestamp from a trusted TSA.
       - name: Verify degu.exe signature
         if: steps.signing.outputs.enabled == 'true'
         shell: pwsh
@@ -303,11 +341,13 @@ jobs:
             exit 1
           }
 
+      # Order matters: zip + hash AFTER the sign step, never before. The
+      # published .sha256 must cover the signed bytes; otherwise users who
+      # verify the hash and re-extract get a hash mismatch on re-zip.
       - name: Stage Wails GUI archive
         run: |
           mkdir -p release
-          # 7z is preinstalled on the windows-2022 runner. The zip captures
-          # the (now-signed) degu.exe; its sha256 is computed after signing.
+          # 7z is preinstalled on the windows-2022 runner.
           (cd build/bin && 7z a "../../release/degu-${TAG}-windows-amd64.zip" degu.exe)
           (cd release && sha256sum "degu-${TAG}-windows-amd64.zip" \
             > "degu-${TAG}-windows-amd64.zip.sha256")
@@ -320,6 +360,10 @@ jobs:
             -o "release/degu-cli-${TAG}-windows-amd64.exe" \
             ./cmd/degu
 
+      # Same gotchas as the degu.exe sign step above — see inline notes there.
+      # The release/ folder also contains the .zip and .sha256 from the
+      # previous step; the `exe` filter ignores those and only signs the
+      # newly built CLI binary.
       - name: Sign degu-cli (Azure Trusted Signing)
         if: steps.signing.outputs.enabled == 'true'
         uses: azure/trusted-signing-action@v0.4.0

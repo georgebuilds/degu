@@ -228,6 +228,31 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # Sign the Authenticode of `degu.exe` and `degu-cli-*.exe` via Azure
+      # Trusted Signing if the five AZURE_* secrets are configured. If they
+      # aren't, signing steps are skipped and the binaries ship unsigned —
+      # this keeps the workflow runnable in forks / before signing is set up.
+      - name: Detect Azure signing config
+        id: signing
+        env:
+          AZ_TENANT: ${{ secrets.AZURE_TENANT_ID }}
+          AZ_CLIENT: ${{ secrets.AZURE_CLIENT_ID }}
+          AZ_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZ_PROFILE: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+        run: |
+          if [[ -n "$AZ_TENANT" && -n "$AZ_CLIENT" && -n "$AZ_ACCOUNT" && -n "$AZ_PROFILE" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Azure Trusted Signing configured."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Azure Trusted Signing secrets not set; Windows binaries will be UNSIGNED."
+          fi
+
+      - name: Pre-build cleanup
+        # Wipe stale prior-version artifacts so the signer can't pick them
+        # up if the runner is reused with a cached workspace.
+        run: rm -rf build/bin
+
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
@@ -249,22 +274,101 @@ jobs:
           test -f build/bin/degu.exe
           file build/bin/degu.exe
 
-      - name: Stage release artifacts
+      - name: Sign degu.exe (Azure Trusted Signing)
+        if: steps.signing.outputs.enabled == 'true'
+        uses: azure/trusted-signing-action@v0.4.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          files-folder: ${{ github.workspace }}/build/bin
+          files-folder-filter: exe
+          files-folder-recurse: false
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: true
+          exclude-azure-powershell-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Verify degu.exe signature
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature build/bin/degu.exe
+          $sig | Format-List
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "degu.exe signature status is $($sig.Status), expected Valid"
+            exit 1
+          }
+
+      - name: Stage Wails GUI archive
         run: |
           mkdir -p release
-          # 7z is preinstalled on the windows-2022 runner.
+          # 7z is preinstalled on the windows-2022 runner. The zip captures
+          # the (now-signed) degu.exe; its sha256 is computed after signing.
           (cd build/bin && 7z a "../../release/degu-${TAG}-windows-amd64.zip" degu.exe)
           (cd release && sha256sum "degu-${TAG}-windows-amd64.zip" \
             > "degu-${TAG}-windows-amd64.zip.sha256")
 
+      - name: Build degu-cli
+        run: |
           node scripts/build-embed.mjs
           go build -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}" \
             -o "release/degu-cli-${TAG}-windows-amd64.exe" \
             ./cmd/degu
+
+      - name: Sign degu-cli (Azure Trusted Signing)
+        if: steps.signing.outputs.enabled == 'true'
+        uses: azure/trusted-signing-action@v0.4.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://eus.codesigning.azure.net/
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          files-folder: ${{ github.workspace }}/release
+          files-folder-filter: exe
+          files-folder-recurse: false
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+          exclude-environment-credential: true
+          exclude-workload-identity-credential: true
+          exclude-managed-identity-credential: true
+          exclude-shared-token-cache-credential: true
+          exclude-visual-studio-credential: true
+          exclude-visual-studio-code-credential: true
+          exclude-azure-cli-credential: true
+          exclude-azure-powershell-credential: true
+          exclude-interactive-browser-credential: true
+
+      - name: Verify degu-cli signature
+        if: steps.signing.outputs.enabled == 'true'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature "release/degu-cli-$env:TAG-windows-amd64.exe"
+          $sig | Format-List
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "degu-cli signature status is $($sig.Status), expected Valid"
+            exit 1
+          }
+
+      - name: Hash degu-cli
+        run: |
           (cd release && sha256sum "degu-cli-${TAG}-windows-amd64.exe" \
             > "degu-cli-${TAG}-windows-amd64.exe.sha256")
-
           ls -la release
 
       - uses: actions/upload-artifact@v4

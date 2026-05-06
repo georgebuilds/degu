@@ -4,26 +4,64 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>degu — a media browser that travels with your files</title>
-    <meta name="description" content="A media browser that travels with your files. Download, drop next to your media, double-click. degu serves that folder — your tags, loops, and thumbnails live next to it. Nothing in the cloud." />
-    <link rel="canonical" href="https://georgebuilds.github.io/degu/" />
+    <meta name="description" content="A local-first media browser that travels with your media. Drop it on a drive, double-click — your tags, A–B loops, and thumbnails live right next to the files. By George Fernandez (georgebuilds)." />
+    <meta name="author" content="George Fernandez" />
+    <meta name="keywords" content="degu, local-first media browser, file system access api, media tagging, video A-B loop, ffmpeg.wasm, Wails, Go, Preact, georgebuilds, George Fernandez" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://georgebuilds.com/degu/" />
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://georgebuilds.github.io/degu/" />
+    <meta property="og:url" content="https://georgebuilds.com/degu/" />
     <meta property="og:title" content="degu — a media browser that travels with your files" />
-    <meta property="og:description" content="Download, drop next to your media, double-click. degu serves that folder — your tags, loops, and thumbnails live right next to the files. Nothing leaves your machine." />
-    <meta property="og:site_name" content="degu" />
-    <meta property="og:image" content="https://georgebuilds.github.io/degu/apple-touch-icon.png" />
+    <meta property="og:description" content="Drop degu on a drive, double-click. It serves that folder — your tags, A–B loops, and thumbnails live right next to the files. Nothing leaves your machine." />
+    <meta property="og:site_name" content="degu · georgebuilds" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content="https://georgebuilds.com/degu/apple-touch-icon.png" />
     <meta property="og:image:width" content="180" />
     <meta property="og:image:height" content="180" />
+    <meta property="og:image:alt" content="degu — local-first media browser" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="degu — a media browser that travels with your files" />
-    <meta name="twitter:description" content="Download, drop next to your media, double-click. Your tags, loops, and thumbnails live right next to the files. Nothing leaves your machine." />
-    <meta name="twitter:image" content="https://georgebuilds.github.io/degu/apple-touch-icon.png" />
+    <meta name="twitter:description" content="Drop degu on a drive, double-click. Your tags, A–B loops, and thumbnails live right next to the files. Nothing leaves your machine." />
+    <meta name="twitter:image" content="https://georgebuilds.com/degu/apple-touch-icon.png" />
+    <meta name="twitter:image:alt" content="degu — local-first media browser" />
 
     <meta name="theme-color" content="#0a0f24" />
+
+    <!-- rel=me back to the umbrella site (entity verification) -->
+    <link rel="me" href="https://georgebuilds.com/" />
+    <link rel="author" href="https://georgebuilds.com/" />
+
+    <!-- structured data: SoftwareApplication + creator linked to the main Person record -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "degu",
+        "alternateName": "degu media browser",
+        "url": "https://georgebuilds.com/degu/",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "macOS, Linux, Windows, Web (Chromium)",
+        "description": "A local-first media browser. Drop it on a drive; tags, A–B loops, and thumbnails live next to your files.",
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
+        "codeRepository": "https://github.com/georgebuilds/degu",
+        "image": "https://georgebuilds.com/degu/apple-touch-icon.png",
+        "creator": {
+          "@type": "Person",
+          "name": "George Fernandez",
+          "url": "https://georgebuilds.com/",
+          "sameAs": [
+            "https://github.com/georgebuilds",
+            "https://www.linkedin.com/in/georgebuilds",
+            "https://bsky.app/profile/georgebuilds.com"
+          ]
+        },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
 
     <!-- Favicons -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
@@ -184,6 +222,46 @@
       }
       .brand .glyph {
         color: var(--accent);
+      }
+      /* "gb / degu" prefix — gb expands to georgebuilds on hover/focus,
+         pushing the rest of the brand to the right with a smooth animation.
+         Click navigates to georgebuilds.com (same tab — these sites are siblings). */
+      .gb-link {
+        display: inline-flex;
+        align-items: baseline;
+        text-decoration: none;
+        color: var(--muted);
+        transition: color 0.25s ease;
+        outline: none;
+      }
+      .gb-link:hover,
+      .gb-link:focus-visible {
+        color: var(--bone);
+      }
+      .gb-abbr,
+      .gb-full {
+        display: inline-block;
+        overflow: hidden;
+        white-space: nowrap;
+        max-width: 0;
+        opacity: 0;
+        transition:
+          max-width 0.42s cubic-bezier(0.22, 0.9, 0.25, 1),
+          opacity 0.25s ease;
+      }
+      .gb-abbr { max-width: 4ch; opacity: 1; }
+      .gb-link:hover .gb-abbr,
+      .gb-link:focus-visible .gb-abbr { max-width: 0; opacity: 0; }
+      .gb-link:hover .gb-full,
+      .gb-link:focus-visible .gb-full {
+        max-width: 14ch;
+        opacity: 1;
+        transition-delay: 0.04s;
+      }
+      .brand-sep {
+        color: var(--soft);
+        margin: 0 0.45em;
+        user-select: none;
       }
       .brand-tag {
         color: var(--soft);
@@ -937,10 +1015,14 @@
 
     <div class="stage">
       <header class="top">
-        <div class="brand">
+        <h1 class="brand">
+          <a class="gb-link" href="https://georgebuilds.com/" aria-label="georgebuilds — home">
+            <span class="gb-abbr">gb</span><span class="gb-full">georgebuilds</span>
+          </a>
+          <span class="brand-sep" aria-hidden="true">/</span>
           <span>degu<span class="glyph">.</span></span>
           <span class="brand-tag">v0.1 · agpl-3.0</span>
-        </div>
+        </h1>
         <nav class="links" aria-label="primary">
           <a class="link" href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">source</a>
           <a class="link" href="https://github.com/georgebuilds/degu/releases" target="_blank" rel="noopener">releases</a>

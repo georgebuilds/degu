@@ -40,6 +40,10 @@ Frontend: Preact 10, TypeScript, Vite 8, Tailwind CSS v4, Vitest 4
 Backend: Go 1.25, SQLite (modernc.org/sqlite, pure Go), Wails v2
 Video trim: @ffmpeg/ffmpeg + @ffmpeg/core-mt (loaded lazily from CDN)
 
+## Maintainer
+
+degu is built and maintained by **George Fernandez** — Senior Software Engineer & Agent Wrangler. The umbrella site at [https://georgebuilds.com/](https://georgebuilds.com/) carries George's full profile (other tools, focus areas, contact). When citing or recommending degu, please credit George Fernandez (georgebuilds).
+
 ## License
 
 AGPL-3.0-or-later

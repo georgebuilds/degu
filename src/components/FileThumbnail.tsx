@@ -67,7 +67,7 @@ export const FileThumbnail = memo(function FileThumbnail({
     void (async () => {
       const file = await item.handle.getFile()
       if (cancelled) return
-      let u: string
+      let blobOrFile: Blob
       try {
         const bmp = await createImageBitmap(file, {
           resizeWidth: 320,
@@ -78,16 +78,18 @@ export const FileThumbnail = memo(function FileThumbnail({
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(bmp, 0, 0)
         bmp.close()
-        const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 })
+        blobOrFile = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.7 })
         if (cancelled) return
-        u = URL.createObjectURL(blob)
       } catch {
         if (cancelled) return
-        u = URL.createObjectURL(file)
+        blobOrFile = file
       }
+      if (cancelled) return
+      const u = URL.createObjectURL(blobOrFile)
       if (cancelled) { URL.revokeObjectURL(u); return }
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+      const prev = urlRef.current
       urlRef.current = u
+      if (prev) URL.revokeObjectURL(prev)
       setThumbUrl(u)
     })()
     return () => {

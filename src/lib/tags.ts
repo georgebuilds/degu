@@ -206,8 +206,6 @@ export function setTags(storageKey: string, tags: string[]): void {
   if (loadState !== 'loaded' || !index) return
   if (tags.length === 0) {
     delete index[storageKey]
-    if (lastReviewedMap) delete lastReviewedMap[storageKey]
-    if (tagCreatedAtMap) delete tagCreatedAtMap[storageKey]
   } else {
     index[storageKey] = tags
     stampTimestamps(storageKey, tags)

@@ -42,6 +42,7 @@ export function TagsModal({
   const [tags, setTagsState] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const lastPersistedRef = useRef<string[]>([])
   useFocusTrap(dialogRef, true)
   const primaryKey = tagStorageKeys[0] ?? ''
   const baseName = basenameFromRelativePath(primaryKey)
@@ -61,11 +62,12 @@ export function TagsModal({
       setLoading(false)
       return
     }
-    setTagsState(
+    const initial =
       tagStorageKeys.length === 1
         ? getTags(tagStorageKeys[0]!)
         : unionSortedTags(tagStorageKeys)
-    )
+    setTagsState(initial)
+    lastPersistedRef.current = initial
     setLoading(false)
   }, [keysJoined, tagsAllowed])
 
@@ -73,7 +75,7 @@ export function TagsModal({
 
   const persist = useCallback(
     (next: string[]) => {
-      const previous = tags
+      const previous = lastPersistedRef.current
       for (const t of next) {
         if (!previous.includes(t)) recordTagApplied(t)
       }
@@ -81,24 +83,26 @@ export function TagsModal({
         const key = tagStorageKeys[0]!
         setTags(key, next)
         setTagsState(next)
+        lastPersistedRef.current = next
         onSaved(key, previous, next)
         return
       }
       setTagsState(next)
+      lastPersistedRef.current = next
       for (const key of tagStorageKeys) {
         const prev = getTags(key)
         setTags(key, next)
         onSaved(key, prev, next)
       }
     },
-    [tagStorageKeys, onSaved, tags]
+    [tagStorageKeys, onSaved]
   )
 
   const removeTag = useCallback(
     (tag: string) => {
-      persist(tags.filter(t => t !== tag))
+      persist(lastPersistedRef.current.filter(t => t !== tag))
     },
-    [tags, persist]
+    [persist]
   )
 
   const tagSuggestions = useMemo(() => {

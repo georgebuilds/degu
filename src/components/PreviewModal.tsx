@@ -319,9 +319,10 @@ export function PreviewModal({
     [fileHandle, fileName, saveDirectoryHandle, onTrimExported]
   )
 
-  useModalEscape(true, onClose)
+  const { isTopOfStack } = useModalEscape(true, onClose)
 
   useEffect(() => {
+    if (!isTopOfStack) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return
       if (keyboardTargetIsEditable(e.target)) return
@@ -337,7 +338,7 @@ export function PreviewModal({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onNavigateSibling])
+  }, [onNavigateSibling, isTopOfStack])
 
   useEffect(() => {
     return () => {
@@ -479,13 +480,13 @@ export function PreviewModal({
                   setDuration(Number.isFinite(t) ? t : 0)
                 }}
                 onLoadedData={e => {
+                  if (!e.currentTarget.isConnected) return
                   void e.currentTarget.play().catch(() => {
                     /* muted autoplay usually allowed; unmuted may need gesture */
                   })
                 }}
               />
-              {kind === 'video' ? (
-                <div class="rounded-lg border border-zinc-700/80 bg-zinc-900/50 px-3 py-2">
+              <div class="rounded-lg border border-zinc-700/80 bg-zinc-900/50 px-3 py-2">
                   <div class="mb-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                     Loops
                   </div>
@@ -754,7 +755,6 @@ export function PreviewModal({
                     </ul>
                   )}
                 </div>
-              ) : null}
             </div>
           )}
         </div>

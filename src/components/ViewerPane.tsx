@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import type { PreviewKind } from '../lib/preview'
 import { useFileBlobURL } from '../lib/use-blob-url'
 import { useVideoABLoop } from '../lib/video-ab-loop.ts'
+import { useModalEscape } from './use-modal-stack.ts'
 
 export type ViewerPaneItem = {
   /** Stable id (path-based tag key matches FileListItem, or `path#loop:uuid` for saved loops). */
@@ -120,14 +121,7 @@ export function ViewerPane({ items, onRemove, onClear }: ViewerPaneProps) {
     }
   }, [expanded])
 
-  useEffect(() => {
-    if (!expanded) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setExpanded(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [expanded])
+  useModalEscape(expanded, () => setExpanded(false))
 
   const canMultiColumn = shellWidth > MIN_WIDTH_FOR_COLUMNS_PX
   const effectiveCols = canMultiColumn

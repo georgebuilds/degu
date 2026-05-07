@@ -24,11 +24,18 @@ export function TagEditor({
 }: TagEditorProps) {
   const [draft, setDraft] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const unmountedRef = useRef(false)
   const rawId = useId()
   const datalistId = useMemo(
     () => `tag-ac-${rawId.replaceAll(':', '')}`,
     [rawId]
   )
+
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true
+    }
+  }, [])
 
   const datalistOptions = useMemo(() => {
     const tagSet = new Set(tags)
@@ -82,6 +89,7 @@ export function TagEditor({
           }
         }}
         onBlur={() => {
+          if (unmountedRef.current) return
           if (draft.trim()) commit(draft)
         }}
       />

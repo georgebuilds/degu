@@ -125,7 +125,7 @@ describe('tags.ts durability', () => {
     expect(fake.saveTags).toHaveBeenCalledTimes(2)
   })
 
-  it('setTags(key, []) deletes index[key] AND lastReviewed[key] (S6)', async () => {
+  it('setTags(key, []) deletes index[key] but preserves lastReviewed[key] (S6)', async () => {
     const { tags, driverMod } = await loadModule()
     const fake = makeFakeDriver({
       tags: { 'p/x.png': ['old'] },
@@ -140,13 +140,14 @@ describe('tags.ts durability', () => {
 
     tags.setTags('p/x.png', [])
     expect(tags.getTags('p/x.png')).toEqual([])
-    expect(tags.getLastReviewed('p/x.png')).toBeNull()
+    // Review state ("I looked at this file") is independent of "currently tagged".
+    expect(tags.getLastReviewed('p/x.png')).toBe('2020-01-01T00:00:00.000Z')
 
     await vi.advanceTimersByTimeAsync(500)
     expect(fake.saveTags).toHaveBeenCalledTimes(1)
     const saved = fake.saveTags.mock.calls[0][0]
     expect(saved.tags['p/x.png']).toBeUndefined()
-    expect(saved.lastReviewed['p/x.png']).toBeUndefined()
+    expect(saved.lastReviewed['p/x.png']).toBe('2020-01-01T00:00:00.000Z')
   })
 
   it('successful initTagIndex bumps tagIndexVersion', async () => {

@@ -60,8 +60,11 @@ export class HttpDriver implements StorageDriver {
         signal: t.signal,
       })
       if (!r.ok) return null
-      const info = (await r.json()) as { root?: string }
-      const root = info.root ?? ''
+      const info = (await r.json()) as { root?: unknown }
+      const root = info.root
+      if (typeof root !== 'string') {
+        throw new Error(`GET ${INFO_API}: invalid response shape (root not a string)`)
+      }
       const name = root.split('/').filter(Boolean).pop() ?? root ?? 'root'
       return new HttpDriver(name)
     } catch {

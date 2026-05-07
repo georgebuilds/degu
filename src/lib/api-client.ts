@@ -35,6 +35,40 @@ export type InfoResponse = {
 
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' }
 
+/** Default timeouts on JSON endpoints; fetchFile is uncapped (streamed). */
+const SCAN_TIMEOUT_MS = 60_000
+const STATS_TIMEOUT_MS = 30_000
+
+/**
+ * Combine a caller-supplied AbortSignal with a default timeout. Returns the
+ * combined signal plus a `cancel()` to clear the timeout when the request
+ * resolves on its own.
+ */
+function withDefaultTimeout(
+  caller: AbortSignal | undefined,
+  ms: number
+): { signal: AbortSignal; cancel: () => void } {
+  const ctrl = new AbortController()
+  const timer = setTimeout(
+    () => ctrl.abort(new DOMException(`timed out after ${ms}ms`, 'TimeoutError')),
+    ms
+  )
+  let onAbort: (() => void) | null = null
+  if (caller) {
+    if (caller.aborted) {
+      ctrl.abort(caller.reason)
+    } else {
+      onAbort = () => ctrl.abort(caller.reason)
+      caller.addEventListener('abort', onAbort, { once: true })
+    }
+  }
+  const cancel = () => {
+    clearTimeout(timer)
+    if (caller && onAbort) caller.removeEventListener('abort', onAbort)
+  }
+  return { signal: ctrl.signal, cancel }
+}
+
 async function expectOk(res: Response, label: string): Promise<Response> {
   if (!res.ok) {
     let detail = res.statusText
@@ -62,26 +96,45 @@ export function thumbURL(rel: string, width = 256): string {
   return `/api/thumb/${encodePath(rel)}?w=${width}`
 }
 
-export async function getInfo(): Promise<InfoResponse> {
-  const r = await fetch('/api/info', { headers: { Accept: 'application/json' } })
+export async function getInfo(signal?: AbortSignal): Promise<InfoResponse> {
+  const r = await fetch('/api/info', {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
   await expectOk(r, 'GET /api/info')
   return r.json()
 }
 
-export async function scanRoot(): Promise<ScanResponse> {
-  const r = await fetch('/api/scan', { headers: { Accept: 'application/json' } })
-  await expectOk(r, 'GET /api/scan')
-  return r.json()
+export async function scanRoot(signal?: AbortSignal): Promise<ScanResponse> {
+  const t = withDefaultTimeout(signal, SCAN_TIMEOUT_MS)
+  try {
+    const r = await fetch('/api/scan', {
+      headers: { Accept: 'application/json' },
+      signal: t.signal,
+    })
+    await expectOk(r, 'GET /api/scan')
+    return r.json()
+  } finally {
+    t.cancel()
+  }
 }
 
-export async function fetchStats(): Promise<StatsResponse> {
-  const r = await fetch('/api/stats', { headers: { Accept: 'application/json' } })
-  await expectOk(r, 'GET /api/stats')
-  return r.json()
+export async function fetchStats(signal?: AbortSignal): Promise<StatsResponse> {
+  const t = withDefaultTimeout(signal, STATS_TIMEOUT_MS)
+  try {
+    const r = await fetch('/api/stats', {
+      headers: { Accept: 'application/json' },
+      signal: t.signal,
+    })
+    await expectOk(r, 'GET /api/stats')
+    return r.json()
+  } finally {
+    t.cancel()
+  }
 }
 
-export async function fetchFile(rel: string): Promise<Blob> {
-  const r = await fetch(fileURL(rel))
+export async function fetchFile(rel: string, signal?: AbortSignal): Promise<Blob> {
+  const r = await fetch(fileURL(rel), { signal })
   await expectOk(r, `GET ${fileURL(rel)}`)
   return r.blob()
 }

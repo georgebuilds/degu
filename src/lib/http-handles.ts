@@ -12,19 +12,84 @@
  *   1. `getFile()` does a fresh HTTP fetch each call. That's the same model
  *      browsers use when a Blob is produced from a file handle, just with a
  *      round-trip to localhost instead of disk.
- *   2. `values()` calls scanRoot() on every invocation. The Go scan walks
- *      the tree fresh; for typical media libraries this is fast enough.
- *      A future optimisation can cache + invalidate on mutation.
+ *   2. `values()` and `getFileHandle()` share a coalescing scanRoot()
+ *      cache (small TTL + in-flight de-dupe) which is invalidated on any
+ *      mutation through this module (delete, move, save).
  */
 import {
   deleteFile,
   fetchFile,
   fileURL,
+  getInfo,
   moveFile,
   saveFile,
   scanRoot,
   type ScanEntry,
+  type ScanResponse,
 } from './api-client'
+
+/**
+ * Coalescing cache for scanRoot(): a single in-flight scan is shared across
+ * concurrent callers and a tiny TTL absorbs bursts during a render pass.
+ * Mutations through this module bust the cache via invalidateScanCache().
+ */
+const SCAN_CACHE_TTL_MS = 1500
+let inFlightScan: Promise<ScanResponse> | null = null
+let lastScan: { result: ScanResponse; ts: number } | null = null
+
+async function scanRootCached(): Promise<ScanResponse> {
+  if (lastScan && Date.now() - lastScan.ts < SCAN_CACHE_TTL_MS) {
+    return lastScan.result
+  }
+  if (inFlightScan) return inFlightScan
+  const p = scanRoot()
+    .then(result => {
+      lastScan = { result, ts: Date.now() }
+      return result
+    })
+    .finally(() => {
+      if (inFlightScan === p) inFlightScan = null
+    })
+  inFlightScan = p
+  return p
+}
+
+export function invalidateScanCache(): void {
+  lastScan = null
+}
+
+/**
+ * Cached liveness probe for permission queries. Pings /api/info; if the
+ * server is reachable we report 'granted', otherwise 'denied'. Cached so
+ * a render burst can't hammer the endpoint.
+ */
+const PERMISSION_PROBE_TTL_MS = 5000
+let lastPermissionProbe: { result: 'granted' | 'denied'; ts: number } | null =
+  null
+let inFlightPermissionProbe: Promise<'granted' | 'denied'> | null = null
+
+async function probeServerPermission(): Promise<'granted' | 'denied'> {
+  const now = Date.now()
+  if (lastPermissionProbe && now - lastPermissionProbe.ts < PERMISSION_PROBE_TTL_MS) {
+    return lastPermissionProbe.result
+  }
+  if (inFlightPermissionProbe) return inFlightPermissionProbe
+  const p = (async () => {
+    try {
+      await getInfo()
+      return 'granted' as const
+    } catch {
+      return 'denied' as const
+    }
+  })().then(result => {
+    lastPermissionProbe = { result, ts: Date.now() }
+    return result
+  }).finally(() => {
+    if (inFlightPermissionProbe === p) inFlightPermissionProbe = null
+  })
+  inFlightPermissionProbe = p
+  return p
+}
 
 function joinRel(parent: string, name: string): string {
   if (parent === '') return name
@@ -91,15 +156,16 @@ export class HttpFileHandle {
     const parent = dirnameOf(this.relativePath)
     const to = joinRel(parent, newName)
     await moveFile(this.relativePath, to)
+    invalidateScanCache()
     // The handle is now stale; callers re-resolve from a fresh scan.
   }
 
-  async queryPermission(): Promise<'granted'> {
-    return 'granted'
+  async queryPermission(): Promise<'granted' | 'denied'> {
+    return probeServerPermission()
   }
 
-  async requestPermission(): Promise<'granted'> {
-    return 'granted'
+  async requestPermission(): Promise<'granted' | 'denied'> {
+    return probeServerPermission()
   }
 }
 
@@ -143,8 +209,10 @@ export class HttpFileWritable {
       const tag = (data as { type: string }).type
       if (tag === 'write') {
         this.chunks.push((data as { type: 'write'; data: BlobPart }).data)
+        return
       }
-      // 'seek' / 'truncate' are unused by our save flow; ignore quietly.
+      // 'seek' / 'truncate' aren't supported by this buffer-and-PUT writable.
+      throw new Error(`HttpFileWritable: unsupported chunk type "${tag}"`)
     }
   }
 
@@ -153,6 +221,7 @@ export class HttpFileWritable {
     this.closed = true
     const blob = new Blob(this.chunks)
     await saveFile(this.relativePath, blob, { overwrite: this.overwrite })
+    invalidateScanCache()
   }
 
   async abort(): Promise<void> {
@@ -181,7 +250,7 @@ export class HttpDirectoryHandle {
   }
 
   async *values(): AsyncIterableIterator<HttpFileHandle | HttpDirectoryHandle> {
-    const scan = await scanRoot()
+    const scan = await scanRootCached()
     yield* this.childrenFromScan(scan.entries)
   }
 
@@ -231,7 +300,7 @@ export class HttpDirectoryHandle {
         lastModified: Date.now(),
       })
     }
-    const scan = await scanRoot()
+    const scan = await scanRootCached()
     const entry = scan.entries.find(e => e.path === rel)
     if (!entry) {
       throw notFound(`getFileHandle: ${rel}`)
@@ -264,6 +333,7 @@ export class HttpDirectoryHandle {
   async removeEntry(name: string, _options?: { recursive?: boolean }): Promise<void> {
     const rel = joinRel(this.relativePath, name)
     await deleteFile(rel)
+    invalidateScanCache()
   }
 
   /**
@@ -280,12 +350,12 @@ export class HttpDirectoryHandle {
     return descendant.relativePath.slice(prefix.length).split('/')
   }
 
-  async queryPermission(): Promise<'granted'> {
-    return 'granted'
+  async queryPermission(): Promise<'granted' | 'denied'> {
+    return probeServerPermission()
   }
 
-  async requestPermission(): Promise<'granted'> {
-    return 'granted'
+  async requestPermission(): Promise<'granted' | 'denied'> {
+    return probeServerPermission()
   }
 }
 

@@ -1,5 +1,8 @@
 import { getTagsCached } from './tags'
 import { isSupportedMediaFile } from './supported-media'
+import { mapWithConcurrency } from './throttle'
+
+const SUBDIR_CONCURRENCY = 8
 
 export type TaggedFileEntry = {
   kind: 'file'
@@ -12,14 +15,22 @@ export type TaggedFileEntry = {
   tagStorageKey: string
 }
 
+function abortIfNeeded(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) {
+    throw new DOMException('Search cancelled', 'AbortError')
+  }
+}
+
 async function walk(
   dir: FileSystemDirectoryHandle,
   relPrefix: string,
   requiredTags: string[],
-  tagCache: Map<string, string[]>
+  tagCache: Map<string, string[]>,
+  signal: AbortSignal | undefined
 ): Promise<TaggedFileEntry[]> {
+  abortIfNeeded(signal)
   const out: TaggedFileEntry[] = []
-  const subdirPromises: Promise<TaggedFileEntry[]>[] = []
+  const subdirs: { dh: FileSystemDirectoryHandle; rel: string }[] = []
   const pendingFiles: {
     rel: string
     name: string
@@ -27,6 +38,7 @@ async function walk(
   }[] = []
 
   for await (const entry of dir.values()) {
+    abortIfNeeded(signal)
     const rel = relPrefix === '' ? entry.name : `${relPrefix}/${entry.name}`
     if (entry.kind === 'file') {
       if (!isSupportedMediaFile(entry.name)) continue
@@ -40,18 +52,22 @@ async function walk(
         })
       }
     } else {
-      subdirPromises.push(
-        walk(entry as FileSystemDirectoryHandle, rel, requiredTags, tagCache)
-      )
+      subdirs.push({ dh: entry as FileSystemDirectoryHandle, rel })
     }
   }
 
-  const nestedResults = await Promise.all(subdirPromises)
+  abortIfNeeded(signal)
+  const nestedResults = await mapWithConcurrency(
+    subdirs,
+    ({ dh, rel }) => walk(dh, rel, requiredTags, tagCache, signal),
+    SUBDIR_CONCURRENCY
+  )
   for (const arr of nestedResults) {
     out.push(...arr)
   }
 
   if (pendingFiles.length > 0) {
+    abortIfNeeded(signal)
     const built = await Promise.all(
       pendingFiles.map(async ({ rel, name, fh }) => {
         const file = await fh.getFile()
@@ -75,10 +91,12 @@ async function walk(
 async function walkUntagged(
   dir: FileSystemDirectoryHandle,
   relPrefix: string,
-  tagCache: Map<string, string[]>
+  tagCache: Map<string, string[]>,
+  signal: AbortSignal | undefined
 ): Promise<TaggedFileEntry[]> {
+  abortIfNeeded(signal)
   const out: TaggedFileEntry[] = []
-  const subdirPromises: Promise<TaggedFileEntry[]>[] = []
+  const subdirs: { dh: FileSystemDirectoryHandle; rel: string }[] = []
   const pendingFiles: {
     rel: string
     name: string
@@ -86,6 +104,7 @@ async function walkUntagged(
   }[] = []
 
   for await (const entry of dir.values()) {
+    abortIfNeeded(signal)
     const rel = relPrefix === '' ? entry.name : `${relPrefix}/${entry.name}`
     if (entry.kind === 'file') {
       if (!isSupportedMediaFile(entry.name)) continue
@@ -98,18 +117,22 @@ async function walkUntagged(
         })
       }
     } else {
-      subdirPromises.push(
-        walkUntagged(entry as FileSystemDirectoryHandle, rel, tagCache)
-      )
+      subdirs.push({ dh: entry as FileSystemDirectoryHandle, rel })
     }
   }
 
-  const nestedResults = await Promise.all(subdirPromises)
+  abortIfNeeded(signal)
+  const nestedResults = await mapWithConcurrency(
+    subdirs,
+    ({ dh, rel }) => walkUntagged(dh, rel, tagCache, signal),
+    SUBDIR_CONCURRENCY
+  )
   for (const arr of nestedResults) {
     out.push(...arr)
   }
 
   if (pendingFiles.length > 0) {
+    abortIfNeeded(signal)
     const built = await Promise.all(
       pendingFiles.map(async ({ rel, name, fh }) => {
         const file = await fh.getFile()
@@ -134,13 +157,14 @@ async function walkUntagged(
  * All media files under `root` with no tags (empty tag list in the index).
  */
 export async function findUntaggedFiles(
-  root: FileSystemDirectoryHandle
+  root: FileSystemDirectoryHandle,
+  signal?: AbortSignal
 ): Promise<{
   files: TaggedFileEntry[]
   fileTags: Record<string, string[]>
 }> {
   const tagCache = new Map<string, string[]>()
-  const files = await walkUntagged(root, '', tagCache)
+  const files = await walkUntagged(root, '', tagCache, signal)
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
   const fileTags: Record<string, string[]> = {}
   for (const f of files) {
@@ -154,7 +178,8 @@ export async function findUntaggedFiles(
  */
 export async function findFilesWithAllTags(
   root: FileSystemDirectoryHandle,
-  requiredTags: string[]
+  requiredTags: string[],
+  signal?: AbortSignal
 ): Promise<{
   files: TaggedFileEntry[]
   fileTags: Record<string, string[]>
@@ -163,7 +188,7 @@ export async function findFilesWithAllTags(
     return { files: [], fileTags: {} }
   }
   const tagCache = new Map<string, string[]>()
-  const files = await walk(root, '', requiredTags, tagCache)
+  const files = await walk(root, '', requiredTags, tagCache, signal)
   files.sort((a, b) => a.relativePath.localeCompare(b.relativePath))
   const fileTags: Record<string, string[]> = {}
   for (const f of files) {

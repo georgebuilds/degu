@@ -108,6 +108,23 @@ function compareDirListItems(a: DirListItem, b: DirListItem, mode: SortMode): nu
   return a.name.localeCompare(b.name)
 }
 
+/**
+ * Read size + lastModified from a file handle without paying for a full
+ * fetch when the handle already exposes them. The HTTP shim
+ * (HttpFileHandle) carries both as own properties; the FSA spec puts them
+ * on the resulting File only, so we fall back to getFile() there.
+ */
+async function readEntrySizeMtime(
+  fh: FileSystemFileHandle
+): Promise<{ size: number; lastModified: number }> {
+  const cached = fh as unknown as { size?: unknown; lastModified?: unknown }
+  if (typeof cached.size === 'number' && typeof cached.lastModified === 'number') {
+    return { size: cached.size, lastModified: cached.lastModified }
+  }
+  const file = await fh.getFile()
+  return { size: file.size, lastModified: file.lastModified }
+}
+
 export function FileBrowser({ rootHandle }: FileBrowserProps) {
   const [stack, setStack] = useState<FileSystemDirectoryHandle[]>([rootHandle])
   const [dirs, setDirs] = useState<DirListItem[]>([])
@@ -254,18 +271,19 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
         }
       }
 
-      // Second pass: fetch metadata in parallel
+      // Second pass: read size/mtime — prefer handle properties (HTTP shim
+      // exposes them; the FSA spec doesn't, so fall back to getFile()).
       const resolvedFiles = await Promise.all(
         rawFileHandles.map(async ({ fh, name }) => {
-          const file = await fh.getFile()
+          const { size, lastModified } = await readEntrySizeMtime(fh)
           const tagStorageKey = tagStorageKeyForFileInStack(stack, name)
           return {
             kind: 'file' as const,
             name,
             tagStorageKey,
             handle: fh,
-            size: file.size,
-            lastModified: file.lastModified,
+            size,
+            lastModified,
           }
         })
       )
@@ -841,23 +859,21 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
       nextTags: string[]
     ) => {
       setFileTags(prev => ({ ...prev, [tagStorageKey]: nextTags }))
-      setTagToPathsMap(prev => {
-        if (prev === null) {
-          void rescanRootTags()
-          return prev
-        }
+      if (tagToPathsMap === null) {
+        rescanRootTags()
+      } else {
         const patched = patchTagIndexAfterEdit(
-          new Map(prev),
+          new Map(tagToPathsMap),
           tagStorageKey,
           previousTags,
           nextTags
         )
+        setTagToPathsMap(patched)
         setRootTagCounts(countsFromTagToPaths(patched))
-        return patched
-      })
+      }
       setTagFilterVersion(v => v + 1)
     },
-    [rescanRootTags]
+    [rescanRootTags, tagToPathsMap]
   )
 
   const openPreview = useCallback(

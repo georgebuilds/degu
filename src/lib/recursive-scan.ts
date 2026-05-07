@@ -1,7 +1,9 @@
 import { tagStorageKeyFromRootAndPathUnderCurrentDir } from './tag-key'
 import { getTagsCached } from './tags'
 import { isSupportedMediaFile } from './supported-media'
-import { throttleVoid } from './throttle'
+import { mapWithConcurrency, throttleVoid } from './throttle'
+
+const SUBDIR_CONCURRENCY = 8
 
 export type RecursiveFile = {
   kind: 'file'
@@ -36,6 +38,12 @@ export type SearchScanProgress = {
 export type ScanRecursiveOptions = {
   signal?: AbortSignal
   onProgress?: (p: SearchScanProgress) => void
+  /**
+   * Path prefix already walked from the connected root to `dir`. Used to label
+   * results as `"<startSubpath>/<rel>"` so callers that scan a subdirectory
+   * still produce paths relative to the root.
+   */
+  startSubpath?: string
 }
 
 type WalkFile = Omit<RecursiveFile, 'tagStorageKey'>
@@ -57,8 +65,7 @@ async function walk(
   abortIfNeeded(signal)
   const dirs: RecursiveDir[] = []
   const files: WalkFile[] = []
-  const subdirPromises: Promise<{ dirs: RecursiveDir[]; files: WalkFile[] }>[] =
-    []
+  const subdirs: { dh: FileSystemDirectoryHandle; rel: string }[] = []
   const pendingFiles: {
     rel: string
     name: string
@@ -83,7 +90,7 @@ async function walk(
       }
     } else {
       const dh = entry as FileSystemDirectoryHandle
-      subdirPromises.push(walk(dh, rel, matches, signal, progress, emitProgress))
+      subdirs.push({ dh, rel })
       if (matches(entry.name)) {
         dirs.push({
           kind: 'directory',
@@ -96,7 +103,11 @@ async function walk(
   }
 
   abortIfNeeded(signal)
-  const nestedResults = await Promise.all(subdirPromises)
+  const nestedResults = await mapWithConcurrency(
+    subdirs,
+    ({ dh, rel }) => walk(dh, rel, matches, signal, progress, emitProgress),
+    SUBDIR_CONCURRENCY
+  )
   for (const nested of nestedResults) {
     files.push(...nested.files)
     dirs.push(...nested.dirs)
@@ -150,9 +161,10 @@ export async function scanRecursive(
     : undefined
 
   const matches = (basename: string) => basename.toLowerCase().includes(q)
+  const startSubpath = (options?.startSubpath ?? '').replace(/^\/+|\/+$/g, '')
   const { dirs, files: rawFiles } = await walk(
     root,
-    '',
+    startSubpath,
     matches,
     signal,
     progress,

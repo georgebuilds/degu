@@ -103,6 +103,17 @@ func handleFileDelete(r *http.Request, w http.ResponseWriter, d *sql.DB, abs, re
 	}
 
 	isDir := info.IsDir()
+	if !isDir {
+		base := strings.ToLower(filepath.Base(abs))
+		if strings.HasPrefix(base, "degu.db") {
+			writeJSONError(w, http.StatusNotFound, "file: "+rel)
+			return
+		}
+		if !isServableExt(strings.ToLower(filepath.Ext(abs))) {
+			writeJSONError(w, http.StatusNotFound, "file: "+rel)
+			return
+		}
+	}
 	if err := os.Remove(abs); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			writeJSONError(w, http.StatusNotFound, "file: "+rel)
@@ -134,7 +145,11 @@ func deleteTagRowsForPath(ctx context.Context, d *sql.DB, rel string, isDir bool
 		}
 		if isDir {
 			prefix := strings.TrimSuffix(rel, "/") + "/"
-			if _, err := d.ExecContext(ctx, "DELETE FROM "+table+" WHERE rel_path LIKE ? || '%'", prefix); err != nil {
+			// note: range query rather than LIKE so `_` and `%` in dir names
+			// don't over-match. Increment the trailing '/' to '0' (0x30) to
+			// produce the smallest string strictly greater than any prefix-rooted path.
+			upper := prefix[:len(prefix)-1] + "0"
+			if _, err := d.ExecContext(ctx, "DELETE FROM "+table+" WHERE rel_path >= ? AND rel_path < ?", prefix, upper); err != nil {
 				return err
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // SaveHandler writes a request body to <root>/<path>.
@@ -30,6 +31,15 @@ func SaveHandler(root string) http.Handler {
 		abs, err := SafeJoin(root, rel)
 		if err != nil {
 			writeJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		base := strings.ToLower(filepath.Base(abs))
+		if strings.HasPrefix(base, "degu.db") {
+			writeJSONError(w, http.StatusBadRequest, "save: reserved filename")
+			return
+		}
+		if !isServableExt(strings.ToLower(filepath.Ext(abs))) {
+			writeJSONError(w, http.StatusBadRequest, "save: unsupported extension")
 			return
 		}
 		overwrite := r.URL.Query().Get("overwrite") == "1"
@@ -66,7 +76,11 @@ func SaveHandler(root string) http.Handler {
 		}
 		if err != nil {
 			cleanup()
-			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			// note: MaxBytesReader already wrote 413+body; don't double-write.
+			var mbErr *http.MaxBytesError
+			if !errors.As(err, &mbErr) {
+				writeJSONError(w, http.StatusInternalServerError, err.Error())
+			}
 			return
 		}
 		if err := os.Rename(tmpPath, abs); err != nil {

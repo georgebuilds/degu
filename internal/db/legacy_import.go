@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const legacyIndexFilename = "index.json"
@@ -68,6 +69,10 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 		if k == metaKey {
 			continue
 		}
+		if !validRelPathKey(k) {
+			skipped++
+			continue
+		}
 		var tags []string
 		if err := json.Unmarshal(v, &tags); err != nil {
 			skipped++
@@ -79,9 +84,11 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 				clean = append(clean, t)
 			}
 		}
-		if len(clean) > 0 {
-			state.Tags[k] = clean
+		if len(clean) == 0 {
+			skipped++
+			continue
 		}
+		state.Tags[k] = clean
 	}
 
 	if rawMeta, ok := top[metaKey]; ok {
@@ -127,4 +134,24 @@ func parseLegacyIndex(raw []byte) (*TagState, error) {
 		log.Printf("importer: skipped %d malformed entries", skipped)
 	}
 	return state, nil
+}
+
+// validRelPathKey rejects keys that would be unsafe in file_tag.rel_path:
+// empty, leading slash, contains backslashes, or contains a `..` segment.
+func validRelPathKey(k string) bool {
+	if k == "" {
+		return false
+	}
+	if strings.HasPrefix(k, "/") {
+		return false
+	}
+	if strings.Contains(k, "\\") {
+		return false
+	}
+	for _, seg := range strings.Split(k, "/") {
+		if seg == ".." {
+			return false
+		}
+	}
+	return true
 }

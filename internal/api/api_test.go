@@ -335,6 +335,60 @@ func TestSafeJoinAllowsNonExistent(t *testing.T) {
 	}
 }
 
+func TestDeleteDirectoryTagsDoesNotOvermatchUnderscore(t *testing.T) {
+	root := t.TempDir()
+	d, err := db.Open(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	// Both "a_b/foo.png" and "axb/foo.png" — LIKE 'a_b/%' would match both
+	// because `_` is a single-char wildcard in SQL LIKE.
+	if err := db.SaveTagState(context.Background(), d, &db.TagState{
+		Tags: map[string][]string{
+			"a_b/foo.png": {"keep-me"},
+			"axb/foo.png": {"sibling"},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(root, "a_b"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := deleteTagRowsForPath(context.Background(), d, "a_b", true); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := db.LoadTagState(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := state.Tags["a_b/foo.png"]; ok {
+		t.Errorf("a_b/foo.png tags should have been deleted")
+	}
+	if got := state.Tags["axb/foo.png"]; len(got) != 1 || got[0] != "sibling" {
+		t.Errorf("axb/foo.png tags should have survived: %v", state.Tags)
+	}
+}
+
+func TestSafeJoinRejectsParentSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+
+	// Symlink a directory under root to a directory outside root, then try
+	// to write to a non-existent child beneath the symlink.
+	link := filepath.Join(root, "linkdir")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unsupported in this environment: %v", err)
+	}
+
+	if _, err := SafeJoin(root, "linkdir/new.mp4"); err == nil {
+		t.Fatal("SafeJoin should reject a non-existent dest under a parent symlink that escapes root")
+	}
+}
+
 func TestMovePartialFailureRollsBackRenames(t *testing.T) {
 	root := t.TempDir()
 	d, err := db.Open(context.Background(), root)

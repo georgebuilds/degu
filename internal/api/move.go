@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
@@ -80,22 +81,24 @@ func writeMoveError(w http.ResponseWriter, err error) {
 func applyMoves(ctx context.Context, root string, d *sql.DB, moves []MoveRequest) error {
 	type resolved struct{ fromAbs, toAbs, fromRel, toRel string }
 	plans := make([]resolved, 0, len(moves))
+	seenFrom := make(map[string]struct{}, len(moves))
 	for _, m := range moves {
 		if m.From == "" || m.To == "" {
 			return errors.New("move: from and to required")
 		}
+		if m.From == m.To {
+			return errors.New("move: from == to: " + m.From)
+		}
+		if _, dup := seenFrom[m.From]; dup {
+			return errors.New("move: duplicate from in batch: " + m.From)
+		}
+		seenFrom[m.From] = struct{}{}
 		fromAbs, err := SafeJoin(root, m.From)
 		if err != nil {
 			return err
 		}
 		toAbs, err := SafeJoin(root, m.To)
 		if err != nil {
-			return err
-		}
-		// Refuse overwriting existing files: the user almost certainly didn't mean to.
-		if _, err := os.Stat(toAbs); err == nil {
-			return errors.New("move: destination exists: " + m.To)
-		} else if !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
 		plans = append(plans, resolved{fromAbs, toAbs, m.From, m.To})
@@ -125,40 +128,57 @@ func applyMoves(ctx context.Context, root string, d *sql.DB, moves []MoveRequest
 
 	type renamed struct{ from, to string }
 	var done []renamed
-	rollbackRenames := func() {
+	rollbackRenames := func() error {
+		var errs []error
 		for i := len(done) - 1; i >= 0; i-- {
 			r := done[i]
 			if err := os.Rename(r.to, r.from); err != nil {
 				log.Printf("api: move: compensating rename %q -> %q failed: %v", r.to, r.from, err)
+				errs = append(errs, fmt.Errorf("compensating rename %q -> %q: %w", r.to, r.from, err))
 			}
 		}
+		return errors.Join(errs...)
+	}
+	wrapRollback := func(orig error) error {
+		if rerr := rollbackRenames(); rerr != nil {
+			return errors.Join(orig, fmt.Errorf("rollback failed (filesystem may be inconsistent): %w", rerr))
+		}
+		return orig
 	}
 
 	for _, p := range plans {
-		if err := os.Rename(p.fromAbs, p.toAbs); err != nil {
-			rollbackRenames()
-			return err
+		if err := renameNoOverwrite(p.fromAbs, p.toAbs); err != nil {
+			return wrapRollback(err)
 		}
 		done = append(done, renamed{from: p.fromAbs, to: p.toAbs})
 		if _, err := updateTags.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
-			rollbackRenames()
-			return err
+			return wrapRollback(err)
 		}
 		if _, err := updateReviewed.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
-			rollbackRenames()
-			return err
+			return wrapRollback(err)
 		}
 		if _, err := updateLoops.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
-			rollbackRenames()
-			return err
+			return wrapRollback(err)
 		}
 	}
 
 	if err := tx.Commit(); err != nil {
-		rollbackRenames()
-		return err
+		return wrapRollback(err)
 	}
 	return nil
+}
+
+// renameNoOverwrite renames from -> to and refuses to clobber an existing
+// destination. There is a tiny TOCTOU window between the lstat and rename;
+// the goal here is to close the much larger window where os.Rename silently
+// overwrites on Unix.
+func renameNoOverwrite(from, to string) error {
+	if _, err := os.Lstat(to); err == nil {
+		return fmt.Errorf("%w: %s", fs.ErrExist, to)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return os.Rename(from, to)
 }
 
 // itoa: small int → string without pulling strconv on the hot path.

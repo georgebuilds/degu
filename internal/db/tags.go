@@ -42,76 +42,84 @@ func Empty() *TagState {
 func LoadTagState(ctx context.Context, db *sql.DB) (*TagState, error) {
 	state := Empty()
 
+	if err := loadFileTags(ctx, db, state); err != nil {
+		return nil, err
+	}
+	if err := loadTagCreatedAt(ctx, db, state); err != nil {
+		return nil, err
+	}
+	if err := loadLastReviewed(ctx, db, state); err != nil {
+		return nil, err
+	}
+	if err := loadVideoLoops(ctx, db, state); err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func loadFileTags(ctx context.Context, db *sql.DB, state *TagState) error {
 	rows, err := db.QueryContext(ctx, `SELECT rel_path, tag FROM file_tag`)
 	if err != nil {
-		return nil, fmt.Errorf("db: load file_tag: %w", err)
+		return fmt.Errorf("db: load file_tag: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var path, tag string
 		if err := rows.Scan(&path, &tag); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		state.Tags[path] = append(state.Tags[path], tag)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
+	return rows.Err()
+}
 
-	rows, err = db.QueryContext(ctx, `SELECT tag, created_at FROM tag_created_at`)
+func loadTagCreatedAt(ctx context.Context, db *sql.DB, state *TagState) error {
+	rows, err := db.QueryContext(ctx, `SELECT tag, created_at FROM tag_created_at`)
 	if err != nil {
-		return nil, fmt.Errorf("db: load tag_created_at: %w", err)
+		return fmt.Errorf("db: load tag_created_at: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var tag, ts string
 		if err := rows.Scan(&tag, &ts); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		state.TagCreatedAt[tag] = ts
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
+	return rows.Err()
+}
 
-	rows, err = db.QueryContext(ctx, `SELECT rel_path, reviewed_at FROM last_reviewed`)
+func loadLastReviewed(ctx context.Context, db *sql.DB, state *TagState) error {
+	rows, err := db.QueryContext(ctx, `SELECT rel_path, reviewed_at FROM last_reviewed`)
 	if err != nil {
-		return nil, fmt.Errorf("db: load last_reviewed: %w", err)
+		return fmt.Errorf("db: load last_reviewed: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var path, ts string
 		if err := rows.Scan(&path, &ts); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		state.LastReviewed[path] = ts
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
+	return rows.Err()
+}
 
-	rows, err = db.QueryContext(ctx, `SELECT rel_path, loop_id, start_sec, end_sec FROM video_loop`)
+func loadVideoLoops(ctx context.Context, db *sql.DB, state *TagState) error {
+	rows, err := db.QueryContext(ctx, `SELECT rel_path, loop_id, start_sec, end_sec FROM video_loop`)
 	if err != nil {
-		return nil, fmt.Errorf("db: load video_loop: %w", err)
+		return fmt.Errorf("db: load video_loop: %w", err)
 	}
+	defer rows.Close()
 	for rows.Next() {
 		var path string
 		loop := VideoLoop{}
 		if err := rows.Scan(&path, &loop.ID, &loop.StartSec, &loop.EndSec); err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 		state.VideoLoops[path] = append(state.VideoLoops[path], loop)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	rows.Close()
-
-	return state, nil
+	return rows.Err()
 }
 
 // SaveTagState replaces the full state in a single transaction. The SPA writes

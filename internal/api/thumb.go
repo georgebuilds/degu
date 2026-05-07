@@ -133,7 +133,12 @@ func (c *thumbCache) get(ctx context.Context, absPath string, info os.FileInfo, 
 
 	go func() {
 		defer close(call.done)
-		err := generateThumbnail(ctx, absPath, out, size)
+		// note: don't tie generation to the first caller's request ctx —
+		// if they cancel, all waiters fail. Use a fresh context with our
+		// own timeout so other waiters still get the result.
+		genCtx, genCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer genCancel()
+		err := generateThumbnail(genCtx, absPath, out, size)
 		c.mu.Lock()
 		if err != nil {
 			call.err = err

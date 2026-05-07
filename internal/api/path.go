@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -29,16 +30,44 @@ func SafeJoin(root, rel string) (string, error) {
 		return "", ErrUnsafePath
 	}
 
-	resolved, err := filepath.EvalSymlinks(cleaned)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return cleaned, nil
-		}
-		return "", err
-	}
 	resolvedRoot, err := filepath.EvalSymlinks(rootClean)
 	if err != nil {
 		return "", err
+	}
+
+	resolved, err := filepath.EvalSymlinks(cleaned)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		// note: destination doesn't exist yet (legitimate for save/move
+		// targets). Walk up to the nearest existing ancestor and verify it
+		// — and every intermediate symlink — still resolves inside root.
+		ancestor := cleaned
+		for {
+			parent := filepath.Dir(ancestor)
+			if parent == ancestor {
+				return "", ErrUnsafePath
+			}
+			ancestor = parent
+			if _, statErr := os.Lstat(ancestor); statErr != nil {
+				if errors.Is(statErr, fs.ErrNotExist) {
+					continue
+				}
+				return "", statErr
+			}
+			resolvedAncestor, evalErr := filepath.EvalSymlinks(ancestor)
+			if evalErr != nil {
+				if errors.Is(evalErr, fs.ErrNotExist) {
+					continue
+				}
+				return "", evalErr
+			}
+			if resolvedAncestor != resolvedRoot && !strings.HasPrefix(resolvedAncestor+string(filepath.Separator), resolvedRoot+string(filepath.Separator)) {
+				return "", ErrUnsafePath
+			}
+			return cleaned, nil
+		}
 	}
 	if resolved != resolvedRoot && !strings.HasPrefix(resolved+string(filepath.Separator), resolvedRoot+string(filepath.Separator)) {
 		return "", ErrUnsafePath

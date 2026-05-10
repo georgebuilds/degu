@@ -162,6 +162,11 @@ func bundleHomeDir() string {
 
 // bundleHomeDirFor is the path-only half of bundleHomeDir, split so tests can
 // drive it without pinning to the real os.Executable.
+//
+// When the exe lives inside what *looks* like a macOS bundle (a parent named
+// `MacOS`) but the rest of the bundle structure is missing, we deliberately
+// return "" rather than the bare `…/MacOS` directory — handing back a path
+// the caller may treat as a personal media root would surprise the user.
 func bundleHomeDirFor(exe string) string {
 	dir := filepath.Dir(exe)
 	if filepath.Base(dir) == "MacOS" {
@@ -172,6 +177,7 @@ func bundleHomeDirFor(exe string) string {
 				return filepath.Dir(bundle)
 			}
 		}
+		return ""
 	}
 	return dir
 }

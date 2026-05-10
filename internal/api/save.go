@@ -34,7 +34,7 @@ func SaveHandler(root string) http.Handler {
 			return
 		}
 		base := strings.ToLower(filepath.Base(abs))
-		if strings.HasPrefix(base, "degu.db") {
+		if isReservedFilename(base) {
 			writeJSONError(w, http.StatusBadRequest, "save: reserved filename")
 			return
 		}

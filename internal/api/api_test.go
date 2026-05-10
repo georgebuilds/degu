@@ -433,6 +433,71 @@ func TestMovePartialFailureRollsBackRenames(t *testing.T) {
 	}
 }
 
+// The FSA driver persists tag/loop/timestamp state to <root>/index.json.
+// The HTTP API must refuse to serve, save, or delete that file (and its
+// .tmp/.bak siblings); otherwise a same-origin request can wipe or clobber
+// the entire tag store.
+func TestFileGuardsReservedFilenames(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"index.json", "index.json.tmp", "index.json.bak", "degu.db", "degu.db-wal"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv := httptest.NewServer(FileHandler(root, nil))
+	defer srv.Close()
+
+	check := func(method, name string) {
+		t.Helper()
+		req, _ := http.NewRequest(method, srv.URL+"/api/file/"+name, nil)
+		res, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			t.Errorf("%s /api/file/%s: expected refusal, got 200", method, name)
+		}
+		if _, err := os.Stat(filepath.Join(root, name)); err != nil {
+			t.Errorf("%s /api/file/%s: file should still exist on disk: %v", method, name, err)
+		}
+	}
+	for _, name := range []string{"index.json", "index.json.tmp", "index.json.bak", "degu.db", "degu.db-wal"} {
+		check(http.MethodGet, name)
+		check(http.MethodDelete, name)
+	}
+}
+
+func TestSaveGuardsReservedFilenames(t *testing.T) {
+	root := t.TempDir()
+	for _, name := range []string{"index.json", "index.json.tmp", "index.json.bak", "degu.db"} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte("original"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	srv := httptest.NewServer(SaveHandler(root))
+	defer srv.Close()
+
+	for _, name := range []string{"index.json", "index.json.tmp", "index.json.bak", "degu.db"} {
+		req, _ := http.NewRequest(http.MethodPut, srv.URL+"/api/save/"+name+"?overwrite=1",
+			strings.NewReader("clobbered"))
+		res, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode == http.StatusOK {
+			t.Errorf("PUT /api/save/%s: expected refusal, got 200", name)
+		}
+		got, _ := os.ReadFile(filepath.Join(root, name))
+		if string(got) != "original" {
+			t.Errorf("PUT /api/save/%s: contents changed to %q (reserved filename should be untouchable)", name, got)
+		}
+	}
+}
+
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

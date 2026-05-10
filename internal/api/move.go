@@ -126,31 +126,76 @@ func applyMoves(ctx context.Context, root string, d *sql.DB, moves []MoveRequest
 	}
 	defer updateLoops.Close()
 
-	type renamed struct{ from, to string }
+	type renamed struct{ from, to, fromRel, toRel string }
 	var done []renamed
-	rollbackRenames := func() error {
+	// rollbackRenames reverts the renames in `done` in reverse order. Returns
+	// the indices into `done` whose revert *failed* (i.e. files still on disk
+	// at their toAbs), plus a joined error for those failures.
+	rollbackRenames := func() ([]int, error) {
+		var failed []int
 		var errs []error
 		for i := len(done) - 1; i >= 0; i-- {
 			r := done[i]
 			if err := os.Rename(r.to, r.from); err != nil {
 				log.Printf("api: move: compensating rename %q -> %q failed: %v", r.to, r.from, err)
 				errs = append(errs, fmt.Errorf("compensating rename %q -> %q: %w", r.to, r.from, err))
+				failed = append(failed, i)
 			}
 		}
-		return errors.Join(errs...)
+		return failed, errors.Join(errs...)
 	}
+	// wrapRollback is called on any in-flight failure. When the filesystem
+	// fully reverts, the deferred tx.Rollback restores the DB to its original
+	// state. When it doesn't (some files stayed at their new path), we update
+	// the DB so its rows match on-disk truth — for indices that *did* revert,
+	// undo their pending UPDATE; the rest already point at toRel inside the
+	// open transaction. Then commit, so the SPA's next scan agrees with disk.
 	wrapRollback := func(orig error) error {
-		if rerr := rollbackRenames(); rerr != nil {
-			return errors.Join(orig, fmt.Errorf("rollback failed (filesystem may be inconsistent): %w", rerr))
+		failedIdx, rerr := rollbackRenames()
+		if rerr == nil {
+			return orig
 		}
-		return orig
+		failed := make(map[int]struct{}, len(failedIdx))
+		for _, i := range failedIdx {
+			failed[i] = struct{}{}
+		}
+		var fixupErrs []error
+		for i, r := range done {
+			if _, stayedRenamed := failed[i]; stayedRenamed {
+				continue
+			}
+			if _, err := updateTags.ExecContext(ctx, r.fromRel, r.toRel); err != nil {
+				fixupErrs = append(fixupErrs, err)
+			}
+			if _, err := updateReviewed.ExecContext(ctx, r.fromRel, r.toRel); err != nil {
+				fixupErrs = append(fixupErrs, err)
+			}
+			if _, err := updateLoops.ExecContext(ctx, r.fromRel, r.toRel); err != nil {
+				fixupErrs = append(fixupErrs, err)
+			}
+		}
+		var note string
+		if len(fixupErrs) == 0 {
+			if cerr := tx.Commit(); cerr != nil {
+				fixupErrs = append(fixupErrs, fmt.Errorf("partial-state commit: %w", cerr))
+				note = "DB rolled back; rows reference original paths but some files remain renamed"
+			} else {
+				note = "DB committed to match on-disk state"
+			}
+		} else {
+			note = "DB rolled back; rows reference original paths but some files remain renamed"
+		}
+		log.Printf("api: move: rollback partial (%d rename(s) could not be reverted) — %s", len(failedIdx), note)
+		return errors.Join(orig,
+			fmt.Errorf("rollback partial: %d rename(s) could not be reverted (%s): %w", len(failedIdx), note, rerr),
+			errors.Join(fixupErrs...))
 	}
 
 	for _, p := range plans {
 		if err := renameNoOverwrite(p.fromAbs, p.toAbs); err != nil {
 			return wrapRollback(err)
 		}
-		done = append(done, renamed{from: p.fromAbs, to: p.toAbs})
+		done = append(done, renamed{from: p.fromAbs, to: p.toAbs, fromRel: p.fromRel, toRel: p.toRel})
 		if _, err := updateTags.ExecContext(ctx, p.toRel, p.fromRel); err != nil {
 			return wrapRollback(err)
 		}

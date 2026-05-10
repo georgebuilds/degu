@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -113,6 +115,9 @@ func StatsHandler(root string, d *sql.DB) http.Handler {
 			return nil
 		})
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return
+			}
 			writeJSONError(w, http.StatusInternalServerError, "stats: "+err.Error())
 			return
 		}

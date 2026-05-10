@@ -49,3 +49,20 @@ func TestBundleHomeDirPlainBinary(t *testing.T) {
 		t.Errorf("bundleHomeDirFor(%q) = %q, want %q", exe, got, want)
 	}
 }
+
+// A binary that lives under a `MacOS` directory but isn't part of a real
+// .app bundle should not be treated as a bundled install — returning the
+// bare MacOS path would mislead resolveRoot into using it as a media root.
+func TestBundleHomeDirPartialBundleReturnsEmpty(t *testing.T) {
+	cases := []string{
+		"/Users/me/Documents/MacOS/degu",
+		"/Users/me/Documents/MacOS/Contents/MacOS/degu",
+		"/Users/me/Documents/MacOS/Contents/degu/MacOS/degu",
+	}
+	for _, exe := range cases {
+		got := bundleHomeDirFor(filepath.FromSlash(exe))
+		if got != "" {
+			t.Errorf("bundleHomeDirFor(%q) = %q, want \"\"", exe, got)
+		}
+	}
+}

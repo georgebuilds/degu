@@ -108,7 +108,7 @@ func main() {
 
 	if !*noBrowser {
 		if err := server.OpenBrowser(url); err != nil {
-			fmt.Fprintf(os.Stderr, "degu: could not open browser: %v\n", err)
+			fmt.Fprintf(os.Stderr, "degu: could not open browser: %v\n  open this URL manually: %s\n", err, url)
 		}
 	}
 

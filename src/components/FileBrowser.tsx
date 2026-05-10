@@ -83,8 +83,15 @@ type SortMode =
   | 'tags-asc'
   | 'tags-desc'
 
+/**
+ * Sort modes the local comparator can handle without consulting the tag store.
+ * Tag sorts need a decorate-sort-undecorate pass at the call site, so they're
+ * intentionally excluded here — passing one is a compile error.
+ */
+type LocalSortMode = Exclude<SortMode, 'tags-asc' | 'tags-desc'>
+
 /** Comparator for non-tags sort modes — no global state lookups. */
-function compareFileListItems(a: FileListItem, b: FileListItem, mode: SortMode): number {
+function compareFileListItems(a: FileListItem, b: FileListItem, mode: LocalSortMode): number {
   switch (mode) {
     case 'name-asc':
       return a.name.localeCompare(b.name)
@@ -94,8 +101,6 @@ function compareFileListItems(a: FileListItem, b: FileListItem, mode: SortMode):
       return a.size - b.size || a.name.localeCompare(b.name)
     case 'size-desc':
       return b.size - a.size || a.name.localeCompare(b.name)
-    default:
-      return 0
   }
 }
 

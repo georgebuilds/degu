@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,6 +67,22 @@ func isServableExt(ext string) bool {
 	return ext == ".json"
 }
 
+// isReservedFilename reports whether a (lowercased) basename refers to one of
+// degu's working files: the SQLite database and its journal/WAL siblings, or
+// the FSA driver's index.json tag store and its tmp/bak siblings. The HTTP API
+// must refuse to read, write, or delete these — they're owned by the storage
+// layer, and exposing them lets a same-origin caller corrupt the tag store.
+func isReservedFilename(base string) bool {
+	if strings.HasPrefix(base, "degu.db") {
+		return true
+	}
+	switch base {
+	case "index.json", "index.json.tmp", "index.json.bak":
+		return true
+	}
+	return false
+}
+
 // ScanHandler walks root recursively and returns every supported media file
 // as a flat list with size + mtime.
 //
@@ -120,6 +138,10 @@ func ScanHandler(root string) http.Handler {
 			return nil
 		})
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				// Client disconnected mid-walk; nothing to write.
+				return
+			}
 			writeJSONError(w, http.StatusInternalServerError, "scan: "+err.Error())
 			return
 		}

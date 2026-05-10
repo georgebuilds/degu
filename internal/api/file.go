@@ -43,7 +43,7 @@ func FileHandler(root string, d *sql.DB) http.Handler {
 		}
 
 		base := strings.ToLower(filepath.Base(abs))
-		if strings.HasPrefix(base, "degu.db") {
+		if isReservedFilename(base) {
 			writeJSONError(w, http.StatusNotFound, "file: "+rel)
 			return
 		}
@@ -79,6 +79,11 @@ func FileHandler(root string, d *sql.DB) http.Handler {
 			w.Header().Set("Content-Type", ct)
 		}
 		w.Header().Set("Accept-Ranges", "bytes")
+		// Relax the SPA-shell CORP header for media bytes — the originGuard
+		// already blocks cross-site requests, and pinning same-origin here
+		// would break any cross-origin embed (sandboxed iframe, packaged
+		// WebView with a custom scheme, service-worker preview).
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 		// Cache at the SPA's discretion — the bytes are stable until the
 		// underlying file changes; ETag is mtime+size which is fine for
 		// local-filesystem semantics.
@@ -105,7 +110,7 @@ func handleFileDelete(r *http.Request, w http.ResponseWriter, d *sql.DB, abs, re
 	isDir := info.IsDir()
 	if !isDir {
 		base := strings.ToLower(filepath.Base(abs))
-		if strings.HasPrefix(base, "degu.db") {
+		if isReservedFilename(base) {
 			writeJSONError(w, http.StatusNotFound, "file: "+rel)
 			return
 		}

@@ -161,7 +161,8 @@ func crossOriginIsolation(next http.Handler) http.Handler {
 // are content-hashed by Vite so they can be cached by the browser as it sees fit.
 func noCacheHTML(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || strings.HasSuffix(r.URL.Path, ".html") {
+		p := r.URL.Path
+		if p == "/" || strings.HasSuffix(p, ".html") || strings.HasSuffix(p, ".htm") {
 			w.Header().Set("Cache-Control", "no-store")
 		}
 		next.ServeHTTP(w, r)

@@ -73,6 +73,8 @@ func ThumbHandler(root string) http.Handler {
 		thumbInfo, _ := f.Stat()
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		// See file.go: relax the SPA-shell CORP for media-style bytes.
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
 		http.ServeContent(w, r, "thumb.png", thumbInfo.ModTime(), f)
 	})
 }

@@ -86,6 +86,46 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # ====================================================================
+      # macOS Developer ID signing + Apple notarization
+      # ====================================================================
+      # Sign degu.app and degu-cli-* with a Developer ID Application
+      # certificate, then submit to Apple's notary service. Mirrors the
+      # gated Windows signing pattern in build_windows: when the seven
+      # APPLE_* / KEYCHAIN_PASSWORD secrets aren't all set, every sign /
+      # notarize step skips with a warning and the bundle ships ad-hoc
+      # signed (Gatekeeper then requires a one-time right-click → Open).
+      #
+      # Required repo secrets:
+      #   APPLE_CERTIFICATE            - base64-encoded Developer ID .p12
+      #   APPLE_CERTIFICATE_PASSWORD   - password for the .p12
+      #   APPLE_SIGNING_IDENTITY       - e.g. "Developer ID Application: …"
+      #   APPLE_ID                     - Apple ID used for notarytool
+      #   APPLE_PASSWORD               - app-specific password for that ID
+      #   APPLE_TEAM_ID                - 10-char team identifier
+      #   KEYCHAIN_PASSWORD            - any password for the ephemeral keychain
+      - name: Detect Apple signing config
+        id: signing
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          if [[ -n "$APPLE_CERTIFICATE" && -n "$APPLE_CERTIFICATE_PASSWORD" \
+             && -n "$APPLE_SIGNING_IDENTITY" && -n "$APPLE_ID" \
+             && -n "$APPLE_PASSWORD" && -n "$APPLE_TEAM_ID" \
+             && -n "$KEYCHAIN_PASSWORD" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Apple Developer ID signing + notarization configured."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Apple signing secrets not all set; macOS bundle will be ad-hoc signed and NOT notarized."
+          fi
+
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
@@ -102,14 +142,66 @@ jobs:
           wails build -platform darwin/arm64 -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}"
 
+      - name: Import signing certificate
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o "$CERT_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          # Prepend our keychain to the user search list so codesign finds the identity.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | xargs)
+
+      - name: Sign degu.app
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          /usr/bin/codesign --force --deep --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            build/bin/degu.app
+          /usr/bin/codesign --verify --deep --strict --verbose=2 build/bin/degu.app
+
       - name: Verify the bundle
         run: |
           test -d build/bin/degu.app
           test -x build/bin/degu.app/Contents/MacOS/degu
           file build/bin/degu.app/Contents/MacOS/degu
-          /usr/bin/codesign -dv build/bin/degu.app 2>&1 || true
+          /usr/bin/codesign -dv --verbose=4 build/bin/degu.app 2>&1 | head -30
 
-      - name: Stage release artifacts
+      - name: Notarize and staple degu.app
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k --keepParent --sequesterRsrc \
+            build/bin/degu.app "$RUNNER_TEMP/degu-notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/degu-notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_PASSWORD" \
+            --wait
+          xcrun stapler staple build/bin/degu.app
+          xcrun stapler validate build/bin/degu.app
+
+      # Order matters: zip + hash AFTER signing/notarization, never before.
+      # The published .sha256 must cover the signed+stapled bytes; otherwise
+      # users who verify the hash and re-extract get a mismatch. Same lesson
+      # as the parallel Windows path documents inline.
+      - name: Stage degu.app archive
         run: |
           mkdir -p release
           # `ditto` preserves macOS extended attributes / signatures across
@@ -120,14 +212,46 @@ jobs:
           (cd release && shasum -a 256 "degu-${TAG}-darwin-arm64.zip" \
             > "degu-${TAG}-darwin-arm64.zip.sha256")
 
+      - name: Build degu-cli
+        run: |
           node scripts/build-embed.mjs
           go build -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}" \
             -o "release/degu-cli-${TAG}-darwin-arm64" \
             ./cmd/degu
+
+      - name: Sign degu-cli
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          /usr/bin/codesign --force --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "release/degu-cli-${TAG}-darwin-arm64"
+          /usr/bin/codesign --verify --strict --verbose=2 \
+            "release/degu-cli-${TAG}-darwin-arm64"
+
+      - name: Notarize degu-cli
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          ditto -c -k "release/degu-cli-${TAG}-darwin-arm64" \
+            "$RUNNER_TEMP/degu-cli-notarize.zip"
+          xcrun notarytool submit "$RUNNER_TEMP/degu-cli-notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_PASSWORD" \
+            --wait
+          # Raw mach-o binaries can't be stapled — Gatekeeper queries Apple
+          # online on first launch using the notarization ticket.
+
+      - name: Hash degu-cli
+        run: |
           (cd release && shasum -a 256 "degu-cli-${TAG}-darwin-arm64" \
             > "degu-cli-${TAG}-darwin-arm64.sha256")
-
           ls -la release
 
       - uses: actions/upload-artifact@v6
@@ -442,8 +566,7 @@ jobs:
             BODY+="## macOS (Apple Silicon)"$'\n\n'
             BODY+="1. Download \`degu-${TAG}-darwin-arm64.zip\` and unzip it."$'\n'
             BODY+="2. Drop \`degu.app\` into your media folder and double-click. (Or move it to /Applications for a global install — that flavour defaults to ~/Pictures.)"$'\n'
-            BODY+="3. First launch: right-click → **Open** (self-signed; Gatekeeper requires the explicit allow once)."$'\n'
-            BODY+="   Alternatively: \`xattr -dr com.apple.quarantine /path/to/degu.app\`."$'\n\n'
+            BODY+="3. Signed with a Developer ID certificate and notarized by Apple — Gatekeeper opens it directly, no right-click workaround needed."$'\n\n'
           fi
           if [[ "$LINUX_RESULT" == "success" ]]; then
             BODY+="## Linux (x86_64)"$'\n\n'

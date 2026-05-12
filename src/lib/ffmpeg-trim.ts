@@ -124,7 +124,11 @@ export async function trimVideoStreamCopy(options: {
     throw new Error('Unexpected ffmpeg output')
   } finally {
     if (onProgress) ffmpeg.off('progress', onFfmpegProgress)
-    await ffmpeg.deleteFile(inputName).catch(() => {})
-    await ffmpeg.deleteFile(outputName).catch(() => {})
+    // terminateFFmpeg() flips `loaded` to false and kills the worker, so the
+    // virtual FS is gone; skip deletes in that case.
+    if (ffmpeg.loaded) {
+      await ffmpeg.deleteFile(inputName).catch(() => {})
+      await ffmpeg.deleteFile(outputName).catch(() => {})
+    }
   }
 }

@@ -126,7 +126,19 @@ jobs:
             echo "::warning::Apple signing secrets not all set; macOS bundle will be ad-hoc signed and NOT notarized."
           fi
 
+      # Wails compiles from source on `go install` (~30–60 s on a fresh
+      # runner). Cache the compiled binary keyed on the pinned version so
+      # subsequent runs skip the install entirely; a version bump below
+      # automatically misses the cache and recompiles.
+      - name: Cache Wails CLI
+        id: wails-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/wails
+          key: wails-${{ runner.os }}-${{ runner.arch }}-v2.12.0
+
       - name: Install Wails
+        if: steps.wails-cache.outputs.cache-hit != 'true'
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
       - run: npm ci
@@ -168,10 +180,20 @@ jobs:
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         run: |
-          /usr/bin/codesign --force --deep --options runtime --timestamp \
+          # Sign inside-out: inner Mach-O first, then the bundle. Apple
+          # has deprecated `--deep` (and `--deep --verify`) because it
+          # walks the whole bundle tree at sign time even when there's
+          # nothing nested to sign — noticeably slower, and a no-op for
+          # a Wails app whose only Mach-O lives at Contents/MacOS/degu.
+          # Two explicit signatures are both faster and the pattern
+          # Apple recommends in TN3161 / the codesign(1) man page.
+          /usr/bin/codesign --force --options runtime --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            build/bin/degu.app/Contents/MacOS/degu
+          /usr/bin/codesign --force --options runtime --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" \
             build/bin/degu.app
-          /usr/bin/codesign --verify --deep --strict --verbose=2 build/bin/degu.app
+          /usr/bin/codesign --verify --strict --verbose=2 build/bin/degu.app
 
       - name: Verify the bundle
         run: |
@@ -180,40 +202,9 @@ jobs:
           file build/bin/degu.app/Contents/MacOS/degu
           /usr/bin/codesign -dv --verbose=4 build/bin/degu.app 2>&1 | head -30
 
-      - name: Notarize and staple degu.app
-        if: steps.signing.outputs.enabled == 'true'
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          ditto -c -k --keepParent --sequesterRsrc \
-            build/bin/degu.app "$RUNNER_TEMP/degu-notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/degu-notarize.zip" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_PASSWORD" \
-            --wait
-          xcrun stapler staple build/bin/degu.app
-          xcrun stapler validate build/bin/degu.app
-
-      # Order matters: zip + hash AFTER signing/notarization, never before.
-      # The published .sha256 must cover the signed+stapled bytes; otherwise
-      # users who verify the hash and re-extract get a mismatch. Same lesson
-      # as the parallel Windows path documents inline.
-      - name: Stage degu.app archive
-        run: |
-          mkdir -p release
-          # `ditto` preserves macOS extended attributes / signatures across
-          # the archive boundary in a way `zip -r` doesn't.
-          ditto -c -k --keepParent --sequesterRsrc \
-            build/bin/degu.app \
-            "release/degu-${TAG}-darwin-arm64.zip"
-          (cd release && shasum -a 256 "degu-${TAG}-darwin-arm64.zip" \
-            > "degu-${TAG}-darwin-arm64.zip.sha256")
-
       - name: Build degu-cli
         run: |
+          mkdir -p release
           node scripts/build-embed.mjs
           go build -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}" \
@@ -231,22 +222,98 @@ jobs:
           /usr/bin/codesign --verify --strict --verbose=2 \
             "release/degu-cli-${TAG}-darwin-arm64"
 
-      - name: Notarize degu-cli
+      # Notarization is the dominant wall-clock cost of this job: each
+      # `notarytool submit --wait` blocks for 2–8 min (sometimes longer)
+      # while Apple ingests, scans, and issues a ticket. Run both
+      # submissions as background jobs so the two waits overlap — Apple
+      # processes them in parallel server-side, collapsing total wall
+      # time to roughly the slower of the two instead of summing them.
+      #
+      # We deliberately do this in one step rather than splitting the
+      # job in two: a second `runs-on: macos-14` job would re-run
+      # checkout, setup-go, setup-node, npm ci, and the keychain import
+      # (~60–90 s of duplicated setup). One step keeps the gain pure.
+      - name: Notarize app and CLI in parallel
         if: steps.signing.outputs.enabled == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          # Zip both artifacts for upload. `ditto --keepParent` keeps
+          # the .app directory inside the archive (notarytool requires
+          # the bundle wrapper, not its loose contents). `--sequesterRsrc`
+          # preserves macOS extended attributes / signatures across the
+          # archive boundary in a way `zip -r` doesn't.
+          ditto -c -k --keepParent --sequesterRsrc \
+            build/bin/degu.app "$RUNNER_TEMP/degu-notarize.zip"
           ditto -c -k "release/degu-cli-${TAG}-darwin-arm64" \
             "$RUNNER_TEMP/degu-cli-notarize.zip"
+
+          # Launch both submissions as background jobs. We keep `--wait`
+          # on each — it's the only way notarytool returns a non-zero
+          # exit code on rejection (without it, the submit returns 0
+          # the moment the upload completes, regardless of outcome).
+          # Output is redirected to per-submission log files so we can
+          # print them after both jobs finish, in a deterministic order.
+          xcrun notarytool submit "$RUNNER_TEMP/degu-notarize.zip" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_PASSWORD" \
+            --wait > "$RUNNER_TEMP/notarize-app.log" 2>&1 &
+          APP_PID=$!
+
           xcrun notarytool submit "$RUNNER_TEMP/degu-cli-notarize.zip" \
             --apple-id "$APPLE_ID" \
             --team-id "$APPLE_TEAM_ID" \
             --password "$APPLE_PASSWORD" \
-            --wait
-          # Raw mach-o binaries can't be stapled — Gatekeeper queries Apple
-          # online on first launch using the notarization ticket.
+            --wait > "$RUNNER_TEMP/notarize-cli.log" 2>&1 &
+          CLI_PID=$!
+
+          # `wait <pid>` blocks until that specific PID exits and
+          # returns its exit status; bare `wait` would only surface the
+          # last job's status. We disable `errexit` around the waits so
+          # a failure in the first one doesn't short-circuit before we
+          # collect the second status and dump both logs — otherwise
+          # half the failure context would be lost.
+          set +e
+          wait "$APP_PID"; APP_STATUS=$?
+          wait "$CLI_PID"; CLI_STATUS=$?
+          set -e
+
+          echo "=== degu.app notarization log ==="
+          cat "$RUNNER_TEMP/notarize-app.log"
+          echo "=== degu-cli notarization log ==="
+          cat "$RUNNER_TEMP/notarize-cli.log"
+
+          if [ "$APP_STATUS" -ne 0 ] || [ "$CLI_STATUS" -ne 0 ]; then
+            echo "Notarization failed (app=$APP_STATUS cli=$CLI_STATUS)" >&2
+            exit 1
+          fi
+
+          # Staple the .app so Gatekeeper can verify offline. Raw mach-o
+          # binaries (the CLI) can't be stapled — Gatekeeper queries
+          # Apple online on first launch using the ticket stored during
+          # notarization.
+          xcrun stapler staple build/bin/degu.app
+          xcrun stapler validate build/bin/degu.app
+
+      # Order matters: zip + hash AFTER signing/notarization, never before.
+      # The published .sha256 must cover the signed+stapled bytes; otherwise
+      # users who verify the hash and re-extract get a mismatch. Same lesson
+      # as the parallel Windows path documents inline.
+      - name: Stage degu.app archive
+        run: |
+          mkdir -p release
+          # `ditto` preserves macOS extended attributes / signatures across
+          # the archive boundary in a way `zip -r` doesn't — critical for
+          # the stapled notarization ticket to survive download-and-unzip
+          # on the user's machine.
+          ditto -c -k --keepParent --sequesterRsrc \
+            build/bin/degu.app \
+            "release/degu-${TAG}-darwin-arm64.zip"
+          (cd release && shasum -a 256 "degu-${TAG}-darwin-arm64.zip" \
+            > "degu-${TAG}-darwin-arm64.zip.sha256")
 
       - name: Hash degu-cli
         run: |
@@ -343,6 +410,21 @@ jobs:
         # Wails CLI works in either shell on Windows.
         shell: bash
     steps:
+      # Windows Defender real-time scans every file written to disk, which
+      # taxes Go's build cache (`$LOCALAPPDATA\go-build`), the module cache
+      # under `$USERPROFILE\go\pkg\mod`, npm's tens-of-thousands-of-files
+      # `node_modules` writes, and Wails' CGO + resource-compiler temp
+      # output. Excluding those paths before anything else runs cuts the
+      # job's wall time meaningfully on the hosted windows-2022 runner.
+      # The GH-hosted runner's default user is in Administrators, so
+      # `Add-MpPreference` works without explicit elevation.
+      - name: Exclude build paths from Windows Defender
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath "$env:USERPROFILE\go"
+          Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
+          Add-MpPreference -ExclusionPath "${{ github.workspace }}"
+
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:

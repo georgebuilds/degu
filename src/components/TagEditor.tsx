@@ -90,7 +90,14 @@ export function TagEditor({
         }}
         onBlur={() => {
           if (unmountedRef.current) return
-          if (draft.trim()) commit(draft)
+          // Defer so a datalist click can write its value to the input before
+          // we commit; otherwise some Chromium versions fire blur first and
+          // we'd commit the typed prefix instead of the chosen suggestion.
+          queueMicrotask(() => {
+            if (unmountedRef.current) return
+            const v = inputRef.current?.value ?? draft
+            if (v.trim()) commit(v)
+          })
         }}
       />
       {datalistOptions.length > 0 ? (

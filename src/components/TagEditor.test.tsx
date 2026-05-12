@@ -32,20 +32,24 @@ describe('TagEditor', () => {
     expect(onChange).toHaveBeenCalledWith(['bar'])
   })
 
-  it('blurring input with non-empty draft commits via onChange', () => {
+  it('blurring input with non-empty draft commits via onChange', async () => {
     const onChange = vi.fn()
     render(<TagEditor tags={[]} onChange={onChange} />)
     const input = screen.getByPlaceholderText('Add tags…')
     fireEvent.input(input, { target: { value: 'blurtag' } })
     fireEvent.blur(input)
+    // Blur commit is deferred via queueMicrotask to let a datalist click
+    // settle its value into the input first; flush microtasks before asserting.
+    await Promise.resolve()
     expect(onChange).toHaveBeenCalledWith(['blurtag'])
   })
 
-  it('does not call onChange when blurring with empty draft', () => {
+  it('does not call onChange when blurring with empty draft', async () => {
     const onChange = vi.fn()
     render(<TagEditor tags={[]} onChange={onChange} />)
     const input = screen.getByPlaceholderText('Add tags…')
     fireEvent.blur(input)
+    await Promise.resolve()
     expect(onChange).not.toHaveBeenCalled()
   })
 

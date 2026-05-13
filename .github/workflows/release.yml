@@ -48,7 +48,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Compute and validate tag
         id: tag
@@ -77,11 +77,11 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -321,7 +321,7 @@ jobs:
             > "degu-cli-${TAG}-darwin-arm64.sha256")
           ls -la release
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: mac
           path: release/
@@ -334,11 +334,11 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -392,7 +392,7 @@ jobs:
 
           ls -la release
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: release/
@@ -425,11 +425,11 @@ jobs:
           Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\go-build"
           Add-MpPreference -ExclusionPath "${{ github.workspace }}"
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -501,7 +501,7 @@ jobs:
 
       - name: Sign degu.exe (Azure Trusted Signing)
         if: steps.signing.outputs.enabled == 'true'
-        uses: azure/trusted-signing-action@v0.4.0
+        uses: azure/artifact-signing-action@v1.2.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -572,7 +572,7 @@ jobs:
       # newly built CLI binary.
       - name: Sign degu-cli (Azure Trusted Signing)
         if: steps.signing.outputs.enabled == 'true'
-        uses: azure/trusted-signing-action@v0.4.0
+        uses: azure/artifact-signing-action@v1.2.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -605,7 +605,7 @@ jobs:
             > "degu-cli-${TAG}-windows-amd64.exe.sha256")
           ls -la release
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: release/
@@ -628,9 +628,9 @@ jobs:
       LINUX_RESULT: ${{ needs.build_linux.result }}
       WINDOWS_RESULT: ${{ needs.build_windows.result }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
 

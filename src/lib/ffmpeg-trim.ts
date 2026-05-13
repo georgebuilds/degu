@@ -13,7 +13,13 @@ export function terminateFFmpeg(): void {
   loadPromise = null
 }
 
-async function getLoadedFFmpeg(signal?: AbortSignal): Promise<FFmpeg> {
+/**
+ * Lazy-load the shared ffmpeg-core instance.
+ *
+ * Exported so other callers (scrub-metadata) reuse the same worker/wasm
+ * download rather than loading a second copy.
+ */
+export async function getLoadedFFmpeg(signal?: AbortSignal): Promise<FFmpeg> {
   if (ffmpegInstance?.loaded) return ffmpegInstance
   if (!loadPromise) {
     loadPromise = (async () => {

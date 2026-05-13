@@ -62,6 +62,7 @@ import { FileThumbnail, FolderThumbnail } from './FileThumbnail.tsx'
 import { PreviewModal } from './PreviewModal.tsx'
 import { Sidebar } from './Sidebar.tsx'
 import { NormalizeFilenamesModal } from './NormalizeFilenamesModal.tsx'
+import { ScrubMetadataModal } from './ScrubMetadataModal.tsx'
 import { StorageStatsModal } from './StorageStatsModal.tsx'
 import { TagsModal } from './TagsModal.tsx'
 import { ViewerPane, type ViewerPaneItem } from './ViewerPane.tsx'
@@ -180,6 +181,11 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
   const [tagFilterVersion, setTagFilterVersion] = useState(0)
   const tagFilterScanGen = useRef(0)
   const [normalizeModalOpen, setNormalizeModalOpen] = useState(false)
+  const [scrubModalTarget, setScrubModalTarget] = useState<
+    | { kind: 'allMedia'; label: string }
+    | { kind: 'paths'; paths: string[]; label: string }
+    | null
+  >(null)
   const [storageStatsModalOpen, setStorageStatsModalOpen] = useState(false)
   const [listRefreshTick, setListRefreshTick] = useState(0)
   /** Avoids a full tree walk on every Untagged toggle when the file tree is unchanged. */
@@ -1226,6 +1232,18 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
               >
                 Normalize names…
               </button>
+              <button
+                type="button"
+                class="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs font-medium text-zinc-300 hover:border-zinc-600 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={() =>
+                  setScrubModalTarget({
+                    kind: 'allMedia',
+                    label: 'All media in library',
+                  })
+                }
+              >
+                Scrub metadata…
+              </button>
             </div>
           </div>
           <nav
@@ -1594,6 +1612,13 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
           onApplyFrequentTag={previewQuickAddTag}
           onClose={closePreview}
           onDelete={() => deleteMediaAt(preview.tagStorageKey, preview.fileName)}
+          onScrubMetadata={() =>
+            setScrubModalTarget({
+              kind: 'paths',
+              paths: [preview.tagStorageKey],
+              label: preview.fileName,
+            })
+          }
           fileSizeBytes={preview.fileSizeBytes}
           fileName={preview.fileName}
           saveDirectoryHandle={preview.saveDirectoryHandle}
@@ -1618,6 +1643,22 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
           onClose={() => setNormalizeModalOpen(false)}
           onComplete={report => {
             onNormalizeComplete(report)
+          }}
+        />
+      ) : null}
+
+      {scrubModalTarget ? (
+        <ScrubMetadataModal
+          rootHandle={rootHandle}
+          target={
+            scrubModalTarget.kind === 'allMedia'
+              ? { kind: 'allMedia' }
+              : { kind: 'paths', paths: scrubModalTarget.paths }
+          }
+          targetLabel={scrubModalTarget.label}
+          onClose={() => setScrubModalTarget(null)}
+          onComplete={() => {
+            setListRefreshTick(t => t + 1)
           }}
         />
       ) : null}

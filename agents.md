@@ -75,6 +75,7 @@ src/
     MoreTagsQuickAddDropdown.tsx # "More" submenu used by quick-add menus and pill rows
     NewTagQuickAddDialog.tsx     # Dialog for creating a new tag from the quick-add UI
     NormalizeFilenamesModal.tsx  # Configure → run → report flow for bulk filename rewrite
+    ScrubMetadataModal.tsx       # Strip / modify EXIF + container metadata (bulk or single file)
     StorageStatsModal.tsx        # Storage breakdown by kind / extension / tag
     FileContextMenu.tsx          # Generic positioned context menu container
     ProgressBar.tsx              # Determinate / indeterminate bar (modals, scans)
@@ -106,6 +107,8 @@ src/
     format-media-time.ts # Seconds → m:ss / h:mm:ss
     storage-stats.ts    # One walk → totalBytes, byKind, byExtension, byTag, untaggedBytes
     normalize-filenames.ts # Plan + execute bulk substring removal in basenames; rewrites tag keys; flushes index
+    scrub-metadata.ts   # Plan + execute strip / modify of EXIF + container metadata via ffmpeg.wasm
+    ffmpeg-scrub.ts     # Thin ffmpeg-core wrapper: `-map_metadata -1 -c copy` (strip) or `-metadata k=v` (modify)
     ffmpeg-trim.ts      # Lazy-load `@ffmpeg/core-mt` from CDN, run `-c copy` stream-copy trim
     video-trim-scope.ts # FFmpeg core version pin + MAX_TRIM_INPUT_BYTES (~512 MiB)
     video-trim-estimate.ts # Heuristic kept-bytes / saved-bytes estimate for UI
@@ -173,6 +176,7 @@ Edits are **debounced** to disk/server (400 ms); `flushTagIndex` runs on `pagehi
 
 - `StorageStatsModal` runs `computeStorageStats` (one tree walk) for byte totals broken down by kind, extension, tag, and untagged.
 - `NormalizeFilenamesModal` drives `runNormalizeFilenames`: collect paths, plan substring removals, rename via `FileSystemFileHandle.move` (or `/api/move/batch` in HTTP mode), rewrite tag keys, flush.
+- `ScrubMetadataModal` drives `runScrubMetadata`: collect paths (or use caller-supplied list), call `ffmpeg.wasm` with `-map_metadata -1 -c copy` (strip) or `-metadata k=v` (modify), then overwrite the original via `createWritable`. Modify is **video-only** in v1 — images skip the per-file modify call; a follow-up will add JPEG/PNG EXIF write paths.
 
 ## Conventions for changes
 
@@ -205,6 +209,7 @@ Edits are **debounced** to disk/server (400 ms); `flushTagIndex` runs on `pagehi
   [`media-paths`](src/lib/media-paths.test.ts),
   [`recursive-scan`](src/lib/recursive-scan.test.ts),
   [`normalize-filenames`](src/lib/normalize-filenames.test.ts),
+  [`scrub-metadata`](src/lib/scrub-metadata.test.ts),
   [`video-trim-estimate`](src/lib/video-trim-estimate.test.ts),
   [`video-trim-scope`](src/lib/video-trim-scope.test.ts),
   [`video-ab-loop`](src/lib/video-ab-loop.test.ts),

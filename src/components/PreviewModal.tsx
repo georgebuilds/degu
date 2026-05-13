@@ -38,6 +38,8 @@ type PreviewModalProps = {
   onClose: () => void
   /** Remove the file from disk (after confirmation in the parent). */
   onDelete?: () => void | Promise<void>
+  /** Open the scrub-metadata modal targeting just this file. */
+  onScrubMetadata?: () => void
   fileSizeBytes: number
   fileName: string
   saveDirectoryHandle: FileSystemDirectoryHandle | null
@@ -65,6 +67,7 @@ export function PreviewModal({
   onApplyFrequentTag,
   onClose,
   onDelete,
+  onScrubMetadata,
   fileSizeBytes,
   fileName,
   saveDirectoryHandle,
@@ -378,6 +381,15 @@ export function PreviewModal({
             }}
           >
             {deleteBusy ? 'Deleting…' : 'Delete'}
+          </button>
+        ) : null}
+        {onScrubMetadata ? (
+          <button
+            type="button"
+            class="absolute left-24 top-2 z-10 rounded-md border border-zinc-600 bg-zinc-900/90 px-3 py-1 text-sm text-zinc-200 hover:bg-zinc-800"
+            onClick={onScrubMetadata}
+          >
+            Scrub…
           </button>
         ) : null}
         <button

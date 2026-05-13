@@ -17,6 +17,7 @@
     <meta property="og:description" content="Drop degu on a drive, double-click. It serves that folder — your tags, A–B loops, and thumbnails live right next to the files. Nothing leaves your machine." />
     <meta property="og:site_name" content="degu · georgebuilds" />
     <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="es_ES" />
     <meta property="og:image" content="https://georgebuilds.github.io/degu/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
@@ -939,6 +940,39 @@
         margin: 0 6px;
       }
 
+      /* ===== Language toggle ===== */
+      .lang-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 6px;
+        padding: 3px 6px 2px;
+        border: 1px solid var(--frame);
+        border-radius: 4px;
+        font-size: 10.5px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--soft);
+      }
+      .lang-btn {
+        background: transparent;
+        border: 0;
+        padding: 0 2px;
+        color: var(--muted);
+        font: inherit;
+        font-size: inherit;
+        letter-spacing: inherit;
+        text-transform: inherit;
+        cursor: pointer;
+        transition: color 0.12s;
+      }
+      .lang-btn:hover { color: var(--bone); }
+      .lang-btn[aria-pressed="true"] {
+        color: var(--accent);
+        text-shadow: 0 0 6px rgba(212, 162, 76, 0.4);
+        cursor: default;
+      }
+
       @media (max-width: 640px) {
         .dl-cards {
           grid-template-columns: 1fr;
@@ -1024,20 +1058,25 @@
           <span class="brand-tag">v0.1 · agpl-3.0</span>
         </h1>
         <nav class="links" aria-label="primary">
-          <a class="link" href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">source</a>
-          <a class="link" href="https://github.com/georgebuilds/degu/releases" target="_blank" rel="noopener">releases</a>
-          <a class="link" href="https://github.com/georgebuilds/degu/blob/main/README.md" target="_blank" rel="noopener">readme</a>
+          <a class="link" href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener" data-i18n="nav.source">source</a>
+          <a class="link" href="https://github.com/georgebuilds/degu/releases" target="_blank" rel="noopener" data-i18n="nav.releases">releases</a>
+          <a class="link" href="https://github.com/georgebuilds/degu/blob/main/README.md" target="_blank" rel="noopener" data-i18n="nav.readme">readme</a>
+          <div class="lang-toggle" role="group" aria-label="language">
+            <span aria-hidden="true">[</span>
+            <button type="button" class="lang-btn" data-lang="en" aria-pressed="true">en</button>
+            <span aria-hidden="true">·</span>
+            <button type="button" class="lang-btn" data-lang="es" aria-pressed="false">es</button>
+            <span aria-hidden="true">]</span>
+          </div>
         </nav>
       </header>
 
       <main class="center">
-        <span class="badge">drop next to your media · double-click · no cloud</span>
+        <span class="badge" data-i18n="badge">drop next to your media · double-click · no cloud</span>
 
-        <p class="lede">
+        <p class="lede" data-i18n-html="lede">
           a media browser that travels with your files.<br />
-          <em
-            >download<span class="pipe">·</span>drop it next to your media<span class="pipe">·</span>double-click. tags, loops, and thumbnails live right beside the files.</em
-          >
+          <em>download<span class="pipe">·</span>drop it next to your media<span class="pipe">·</span>double-click. tags, loops, and thumbnails live right beside the files.</em>
         </p>
 
         <div class="install">
@@ -1048,7 +1087,7 @@
                 <span class="dl-card-name">macos</span>
                 <span class="dl-card-arch">arm64</span>
               </div>
-              <div class="dl-card-asset" data-asset>degu.app · latest release</div>
+              <div class="dl-card-asset" data-asset data-i18n="dl.asset.mac">degu.app · latest release</div>
               <a
                 class="dl-card-btn"
                 data-dl
@@ -1056,7 +1095,7 @@
                 target="_blank"
                 rel="noopener"
               >
-                <span class="arrow">↓</span> <span data-btn-label>download</span>
+                <span class="arrow">↓</span> <span data-btn-label data-i18n="dl.btn">download</span>
               </a>
             </div>
 
@@ -1066,7 +1105,7 @@
                 <span class="dl-card-name">linux</span>
                 <span class="dl-card-arch">x86_64</span>
               </div>
-              <div class="dl-card-asset" data-asset>degu binary · latest release</div>
+              <div class="dl-card-asset" data-asset data-i18n="dl.asset.linux">degu binary · latest release</div>
               <a
                 class="dl-card-btn"
                 data-dl
@@ -1074,7 +1113,7 @@
                 target="_blank"
                 rel="noopener"
               >
-                <span class="arrow">↓</span> <span data-btn-label>download</span>
+                <span class="arrow">↓</span> <span data-btn-label data-i18n="dl.btn">download</span>
               </a>
             </div>
 
@@ -1084,7 +1123,7 @@
                 <span class="dl-card-name">windows</span>
                 <span class="dl-card-arch">x64</span>
               </div>
-              <div class="dl-card-asset" data-asset>degu.exe · latest release</div>
+              <div class="dl-card-asset" data-asset data-i18n="dl.asset.win">degu.exe · latest release</div>
               <a
                 class="dl-card-btn"
                 data-dl
@@ -1092,27 +1131,25 @@
                 target="_blank"
                 rel="noopener"
               >
-                <span class="arrow">↓</span> <span data-btn-label>download</span>
+                <span class="arrow">↓</span> <span data-btn-label data-i18n="dl.btn">download</span>
               </a>
             </div>
           </div>
 
-          <p class="dl-instruction">
+          <p class="dl-instruction" data-i18n-html="dl.instruction">
             drop it into the folder you want to browse <span class="dot">·</span> double-click.<br />
             <em>degu serves that folder — your tags and db live next to it.</em>
           </p>
 
           <p class="dl-advanced">
-            <a href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener">view source</a>
+            <a href="https://github.com/georgebuilds/degu" target="_blank" rel="noopener" data-i18n="dl.viewsource">view source</a>
           </p>
         </div>
 
         <div class="footnote">
-          <span>tags + loops live in <code>index.json</code> next to your media</span>
+          <span data-i18n-html="footnote.tags">tags + loops live in <code>index.json</code> next to your media</span>
           <span class="sep">·</span>
-          <span
-            ><a href="https://github.com/georgebuilds/degu/blob/main/LICENSE" target="_blank" rel="noopener">agpl-3.0</a></span
-          >
+          <span><a href="https://github.com/georgebuilds/degu/blob/main/LICENSE" target="_blank" rel="noopener">agpl-3.0</a></span>
         </div>
       </main>
     </div>
@@ -1440,6 +1477,110 @@
     </div>
 
     <script>
+      // ===== i18n =====
+      window.i18n = (() => {
+        const STORE = 'lang';
+        const listeners = new Set();
+
+        const dict = {
+          en: {
+            'meta.title': 'degu — a media browser that travels with your files',
+            'meta.desc': 'A local-first media browser that travels with your media. Drop it on a drive, double-click — your tags, A–B loops, and thumbnails live right next to the files.',
+            'nav.source': 'source',
+            'nav.releases': 'releases',
+            'nav.readme': 'readme',
+            'badge': 'drop next to your media · double-click · no cloud',
+            'lede': 'a media browser that travels with your files.<br /><em>download<span class="pipe">·</span>drop it next to your media<span class="pipe">·</span>double-click. tags, loops, and thumbnails live right beside the files.</em>',
+            'dl.asset.mac': 'degu.app · latest release',
+            'dl.asset.linux': 'degu binary · latest release',
+            'dl.asset.win': 'degu.exe · latest release',
+            'dl.btn': 'download',
+            'dl.instruction': 'drop it into the folder you want to browse <span class="dot">·</span> double-click.<br /><em>degu serves that folder — your tags and db live next to it.</em>',
+            'dl.viewsource': 'view source',
+            'footnote.tags': 'tags + loops live in <code>index.json</code> next to your media',
+          },
+          es: {
+            'meta.title': 'degu — un explorador de medios que viaja con tus archivos',
+            'meta.desc': 'Un explorador de medios local. Ponlo en una unidad, doble clic — tus etiquetas, bucles A–B y miniaturas viven junto a los archivos.',
+            'nav.source': 'código',
+            'nav.releases': 'versiones',
+            'nav.readme': 'léeme',
+            'badge': 'ponlo junto a tus archivos · doble clic · sin nube',
+            'lede': 'un explorador de medios que viaja con tus archivos.<br /><em>descárgalo<span class="pipe">·</span>ponlo junto a tus medios<span class="pipe">·</span>doble clic. etiquetas, bucles y miniaturas viven junto a los archivos.</em>',
+            'dl.asset.mac': 'degu.app · última versión',
+            'dl.asset.linux': 'binario degu · última versión',
+            'dl.asset.win': 'degu.exe · última versión',
+            'dl.btn': 'descargar',
+            'dl.instruction': 'ponlo en la carpeta que quieras explorar <span class="dot">·</span> doble clic.<br /><em>degu sirve esa carpeta — tus etiquetas y db viven junto a ella.</em>',
+            'dl.viewsource': 'ver código',
+            'footnote.tags': 'etiquetas + bucles viven en <code>index.json</code> junto a tus medios',
+          },
+        };
+
+        const detect = () => {
+          try {
+            const saved = localStorage.getItem(STORE);
+            if (saved === 'en' || saved === 'es') return saved;
+          } catch (_) {}
+          const nav = (navigator.language || navigator.userLanguage || 'en').toLowerCase();
+          return nav.startsWith('es') ? 'es' : 'en';
+        };
+
+        let locale = detect();
+
+        const t = (key) => {
+          const table = dict[locale] || dict.en;
+          return table[key] != null ? table[key] : (dict.en[key] != null ? dict.en[key] : key);
+        };
+
+        const apply = () => {
+          document.documentElement.lang = locale;
+          document.title = t('meta.title');
+          const descEl = document.querySelector('meta[name="description"]');
+          if (descEl) descEl.setAttribute('content', t('meta.desc'));
+          document.querySelectorAll('[data-i18n]').forEach((el) => {
+            el.textContent = t(el.dataset.i18n);
+          });
+          document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+            el.innerHTML = t(el.dataset.i18nHtml);
+          });
+          document.querySelectorAll('.lang-btn').forEach((btn) => {
+            btn.setAttribute('aria-pressed', btn.dataset.lang === locale ? 'true' : 'false');
+          });
+          listeners.forEach((fn) => { try { fn(locale); } catch (_) {} });
+        };
+
+        const set = (next) => {
+          if (next !== 'en' && next !== 'es') return;
+          if (next === locale) return;
+          locale = next;
+          try { localStorage.setItem(STORE, locale); } catch (_) {}
+          apply();
+        };
+
+        const init = () => {
+          apply();
+          document.querySelectorAll('.lang-btn').forEach((btn) => {
+            btn.addEventListener('click', () => set(btn.dataset.lang));
+          });
+        };
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init, { once: true });
+        } else {
+          init();
+        }
+
+        return {
+          t,
+          set,
+          get locale() { return locale; },
+          onChange: (fn) => { listeners.add(fn); return () => listeners.delete(fn); },
+        };
+      })();
+    </script>
+
+    <script>
       // ===== STARS =====
       (() => {
         const sky = document.querySelector('.stars');
@@ -1614,6 +1755,7 @@
 
         function applyAvailability(avail) {
           if (!avail) return;
+          const i = window.i18n;
           for (const p of ['mac', 'linux', 'windows']) {
             const card = cards.find((c) => c.dataset.platform === p);
             if (!card) continue;
@@ -1623,6 +1765,7 @@
             const labelEl = card.querySelector('[data-btn-label]');
             if (info) {
               const sizeText = formatBytes(info.size);
+              assetEl.removeAttribute('data-i18n');
               assetEl.textContent = info.name;
               if (sizeText) {
                 const sz = document.createElement('span');
@@ -1632,12 +1775,15 @@
                 assetEl.appendChild(sz);
               }
               dlEl.href = info.url;
-              if (labelEl) labelEl.textContent = 'download ' + info.tag;
+              if (labelEl) {
+                labelEl.removeAttribute('data-i18n');
+                labelEl.textContent = i.t('dl.btn') + ' ' + info.tag;
+                i.onChange(() => { labelEl.textContent = i.t('dl.btn') + ' ' + info.tag; });
+              }
             } else {
-              // Keep generic fallback; ensure href points at latest release page.
-              assetEl.textContent = FALLBACK_ASSET[p];
+              assetEl.textContent = i.t(assetEl.dataset.i18n);
               dlEl.href = RELEASES_LATEST;
-              if (labelEl) labelEl.textContent = 'download';
+              if (labelEl) labelEl.textContent = i.t('dl.btn');
             }
           }
         }

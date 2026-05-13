@@ -6,7 +6,7 @@ import {
   saveDefaultStartMode,
 } from '../lib/settings'
 import { useFocusTrap } from '../lib/use-focus-trap'
-import { LibraryIcon, TagsIcon, TriageIcon } from './mode-icons.tsx'
+import { LibraryIcon, PeopleIcon, TagsIcon, TriageIcon } from './mode-icons.tsx'
 import type { AppMode } from './ModeRail.tsx'
 import { useModalEscape } from './use-modal-stack.ts'
 
@@ -32,6 +32,12 @@ const modeChoices = [
     label: 'Tags',
     description: 'Manage your tag vocabulary.',
     Icon: TagsIcon,
+  },
+  {
+    value: 'people' as const,
+    label: 'People',
+    description: 'Browse and tag faces.',
+    Icon: PeopleIcon,
   },
 ]
 

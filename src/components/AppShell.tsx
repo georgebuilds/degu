@@ -7,6 +7,7 @@ import {
 import { FileBrowser } from './FileBrowser.tsx'
 import { IntroRibbon } from './IntroRibbon.tsx'
 import { ModeRail, type AppMode } from './ModeRail.tsx'
+import { PeopleScreen } from './PeopleScreen.tsx'
 import { SettingsModal } from './SettingsModal.tsx'
 import { TagsScreen } from './TagsScreen.tsx'
 import { TriageScreen } from './TriageScreen.tsx'
@@ -53,6 +54,8 @@ export function AppShell({ rootHandle }: AppShellProps) {
             />
           ) : mode === 'library' ? (
             <FileBrowser rootHandle={rootHandle} />
+          ) : mode === 'people' ? (
+            <PeopleScreen rootFolderName={rootHandle.name} />
           ) : (
             <TagsScreen
               rootFolderName={rootHandle.name}

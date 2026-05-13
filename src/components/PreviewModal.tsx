@@ -27,6 +27,7 @@ import { useRecentTags } from '../lib/use-recent-tags.ts'
 import { useFocusTrap } from '../lib/use-focus-trap.ts'
 import { useFileBlobURL } from '../lib/use-blob-url.ts'
 import { useModalEscape } from './use-modal-stack.ts'
+import { FaceOverlay } from './FaceOverlay.tsx'
 
 type PreviewModalProps = {
   fileHandle: FileSystemFileHandle
@@ -102,6 +103,7 @@ export function PreviewModal({
   >({})
   const [newTagDialogOpen, setNewTagDialogOpen] = useState(false)
   const newTagTriggerRef = useRef<HTMLButtonElement | null>(null)
+  const imgRef = useRef<HTMLImageElement | null>(null)
 
   useFocusTrap(dialogRef, true)
 
@@ -471,11 +473,15 @@ export function PreviewModal({
           {!url ? (
             <p class="px-8 py-12 text-center text-zinc-400">Loading…</p>
           ) : kind === 'image' ? (
-            <img
-              src={url}
-              alt=""
-              class="mx-auto max-h-[80vh] max-w-full object-contain"
-            />
+            <div class="relative">
+              <img
+                ref={imgRef}
+                src={url}
+                alt=""
+                class="mx-auto max-h-[80vh] max-w-full object-contain"
+              />
+              <FaceOverlay tagStorageKey={tagStorageKey} imgRef={imgRef} />
+            </div>
           ) : (
             <div class="flex flex-col gap-4">
               <video

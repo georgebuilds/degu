@@ -1,6 +1,6 @@
-import { LibraryIcon, TagsIcon, TriageIcon } from './mode-icons.tsx'
+import { LibraryIcon, PeopleIcon, TagsIcon, TriageIcon } from './mode-icons.tsx'
 
-export type AppMode = 'triage' | 'library' | 'tags'
+export type AppMode = 'triage' | 'library' | 'tags' | 'people'
 
 type ModeRailProps = {
   mode: AppMode
@@ -61,6 +61,16 @@ export function ModeRail({
         onClick={() => onModeChange('tags')}
       >
         <TagsIcon />
+      </button>
+      <button
+        type="button"
+        class={railBtnClass(mode === 'people')}
+        title="People  ·  face tags"
+        aria-label="People — face tags"
+        aria-current={mode === 'people' ? 'page' : undefined}
+        onClick={() => onModeChange('people')}
+      >
+        <PeopleIcon />
       </button>
       <div class="my-2 h-px w-6 bg-zinc-700" />
       <div class="flex-1" />

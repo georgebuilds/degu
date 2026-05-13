@@ -35,3 +35,25 @@ CREATE TABLE IF NOT EXISTS video_loop (
   PRIMARY KEY (rel_path, loop_id),
   CHECK (start_sec >= 0 AND end_sec > start_sec)
 );
+
+-- People & face regions (v2) ---------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS person (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS face_region (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  rel_path  TEXT NOT NULL,
+  person_id INTEGER REFERENCES person(id) ON DELETE SET NULL,
+  x         REAL,
+  y         REAL,
+  w         REAL,
+  h         REAL,
+  source    TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','auto','confirmed')),
+  confidence REAL
+);
+CREATE INDEX IF NOT EXISTS idx_face_region_path   ON face_region(rel_path);
+CREATE INDEX IF NOT EXISTS idx_face_region_person ON face_region(person_id);

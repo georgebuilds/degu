@@ -73,7 +73,7 @@ func main() {
 		// SPA-paint is a seamless step into the night sky.
 		BackgroundColour: &options.RGBA{R: 5, G: 7, B: 21, A: 255},
 		Mac: &mac.Options{
-			TitleBar: mac.TitleBarHiddenInset(),
+			TitleBar: mac.TitleBarDefault(),
 			About: &mac.AboutInfo{
 				Title:   "degu",
 				Message: "local-first media browser",

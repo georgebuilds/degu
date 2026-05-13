@@ -4,7 +4,7 @@ const KEY_DEFAULT_MODE = 'degu_default_mode'
 const KEY_INTRO_DISMISSED = 'degu_intro_dismissed_v1'
 
 function isAppMode(v: unknown): v is AppMode {
-  return v === 'triage' || v === 'library' || v === 'tags'
+  return v === 'triage' || v === 'library' || v === 'tags' || v === 'people'
 }
 
 export function loadDefaultStartMode(): AppMode {

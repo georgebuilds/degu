@@ -24,7 +24,7 @@ var schemaFS embed.FS
 
 // currentSchemaVersion is the version we expect after migrate() finishes.
 // Bump this and add a case to migrate() when introducing a new schema rev.
-const currentSchemaVersion = 1
+const currentSchemaVersion = 2
 
 // Open returns a *sql.DB pointing at <dir>/degu.db with sane pragmas
 // (WAL, foreign keys on, busy timeout). The schema is created idempotently.
@@ -77,6 +77,10 @@ func migrate(ctx context.Context, db *sql.DB, target int) error {
 			if _, err := db.ExecContext(ctx, string(schema)); err != nil {
 				return fmt.Errorf("db: apply schema: %w", err)
 			}
+		case 1:
+			if _, err := db.ExecContext(ctx, migratePeople); err != nil {
+				return fmt.Errorf("db: apply people migration: %w", err)
+			}
 		default:
 			return fmt.Errorf("db: no migration registered from v%d", version)
 		}
@@ -87,6 +91,28 @@ func migrate(ctx context.Context, db *sql.DB, target int) error {
 	}
 	return nil
 }
+
+const migratePeople = `
+CREATE TABLE IF NOT EXISTS person (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS face_region (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  rel_path  TEXT NOT NULL,
+  person_id INTEGER REFERENCES person(id) ON DELETE SET NULL,
+  x         REAL,
+  y         REAL,
+  w         REAL,
+  h         REAL,
+  source    TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','auto','confirmed')),
+  confidence REAL
+);
+CREATE INDEX IF NOT EXISTS idx_face_region_path   ON face_region(rel_path);
+CREATE INDEX IF NOT EXISTS idx_face_region_person ON face_region(person_id);
+`
 
 // IsEmpty reports whether the store has no tag rows yet — used to decide
 // whether to attempt a one-shot import from a legacy index.json.

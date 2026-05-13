@@ -33,6 +33,16 @@ export type InfoResponse = {
   root: string
 }
 
+export type CheckUpdateResponse = {
+  current: string
+  latest?: string
+  updateAvailable: boolean
+  releaseUrl?: string
+  assetUrl?: string
+  publishedAt?: string
+  error?: string
+}
+
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' }
 
 /** Default timeouts on JSON endpoints; fetchFile is uncapped (streamed). */
@@ -102,6 +112,15 @@ export async function getInfo(signal?: AbortSignal): Promise<InfoResponse> {
     signal,
   })
   await expectOk(r, 'GET /api/info')
+  return r.json()
+}
+
+export async function checkForUpdate(signal?: AbortSignal): Promise<CheckUpdateResponse> {
+  const r = await fetch('/api/check-update', {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  await expectOk(r, 'GET /api/check-update')
   return r.json()
 }
 

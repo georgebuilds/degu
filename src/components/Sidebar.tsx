@@ -1,9 +1,17 @@
+import { useState } from 'preact/hooks'
 import type { MediaKindFilter } from '../lib/supported-media'
 import type { AggregateTagsProgress } from '../lib/root-tag-index'
 import { ProgressBar } from './ProgressBar.tsx'
 import { tagColor } from '../lib/tag-color'
+import { checkForUpdate, type CheckUpdateResponse } from '../lib/api-client'
 
 export type TagCount = { tag: string; count: number }
+
+type UpdateCheckState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | { kind: 'result'; resp: CheckUpdateResponse }
+  | { kind: 'error'; msg: string }
 
 type SidebarProps = {
   collapsed: boolean
@@ -47,6 +55,21 @@ export function Sidebar({
   stack,
   onBreadcrumb,
 }: SidebarProps) {
+  const [updateState, setUpdateState] = useState<UpdateCheckState>({ kind: 'idle' })
+
+  async function onCheckClick() {
+    setUpdateState({ kind: 'checking' })
+    try {
+      const resp = await checkForUpdate()
+      setUpdateState({ kind: 'result', resp })
+    } catch (e) {
+      setUpdateState({
+        kind: 'error',
+        msg: e instanceof Error ? e.message : 'check failed',
+      })
+    }
+  }
+
   return (
     <aside
       class={
@@ -309,6 +332,101 @@ export function Sidebar({
           </div>
         </div>
       )}
+
+      {collapsed ? null : (
+        <div class="shrink-0 border-t border-zinc-800 px-3 py-2 text-[11px] text-zinc-500">
+          <UpdateFooter state={updateState} onCheck={onCheckClick} />
+        </div>
+      )}
     </aside>
+  )
+}
+
+function UpdateFooter({
+  state,
+  onCheck,
+}: {
+  state: UpdateCheckState
+  onCheck: () => void
+}) {
+  if (state.kind === 'checking') {
+    return <span class="text-zinc-500">Checking for updates…</span>
+  }
+  if (state.kind === 'error') {
+    return (
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-amber-400/80" title={state.msg}>
+          Couldn’t check for updates
+        </span>
+        <button
+          type="button"
+          class="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:border-zinc-500"
+          onClick={onCheck}
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+  if (state.kind === 'result') {
+    const { resp } = state
+    if (resp.error) {
+      return (
+        <div class="flex items-center justify-between gap-2">
+          <span class="truncate text-amber-400/80" title={resp.error}>
+            Couldn’t check for updates
+          </span>
+          <button
+            type="button"
+            class="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:border-zinc-500"
+            onClick={onCheck}
+          >
+            Retry
+          </button>
+        </div>
+      )
+    }
+    if (resp.updateAvailable && resp.latest) {
+      const href = resp.assetUrl || resp.releaseUrl
+      return (
+        <div class="flex items-center justify-between gap-2">
+          <span class="truncate text-sky-300" title={`v${resp.current} → v${resp.latest}`}>
+            v{resp.latest} available
+          </span>
+          {href ? (
+            <a
+              class="rounded border border-sky-500/60 bg-sky-600/20 px-2 py-0.5 text-sky-200 hover:bg-sky-600/30"
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Download
+            </a>
+          ) : null}
+        </div>
+      )
+    }
+    return (
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-zinc-500">Up to date{resp.current ? ` (v${resp.current})` : ''}</span>
+        <button
+          type="button"
+          class="rounded border border-zinc-800 px-2 py-0.5 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+          onClick={onCheck}
+          title="Check again"
+        >
+          ↻
+        </button>
+      </div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      class="w-full rounded border border-zinc-700 bg-zinc-950/60 px-2 py-1 text-zinc-300 hover:border-zinc-500"
+      onClick={onCheck}
+    >
+      Check for updates
+    </button>
   )
 }

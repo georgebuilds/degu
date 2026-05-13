@@ -132,7 +132,7 @@ jobs:
       # automatically misses the cache and recompiles.
       - name: Cache Wails CLI
         id: wails-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/go/bin/wails
           key: wails-${{ runner.os }}-${{ runner.arch }}-v2.12.0

@@ -58,6 +58,8 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte(`{"version":"` + jsonEscape(s.cfg.Version) + `","root":"` + jsonEscape(s.cfg.Root) + `"}`))
 	})
 
+	apiMux.Handle("GET /api/check-update", api.CheckUpdateHandler(s.cfg.Version))
+
 	if s.cfg.DB != nil {
 		apiMux.Handle("/api/tags", methodGate(api.TagsHandler(s.cfg.DB), http.MethodGet, http.MethodPut))
 		apiMux.Handle("/api/scan", methodGate(api.ScanHandler(s.cfg.Root), http.MethodGet))

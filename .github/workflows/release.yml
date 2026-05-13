@@ -647,7 +647,7 @@ jobs:
           if [[ "$MAC_RESULT" == "success" ]]; then
             BODY+="## macOS (Apple Silicon)"$'\n\n'
             BODY+="1. Download \`degu-${TAG}-darwin-arm64.zip\` and unzip it."$'\n'
-            BODY+="2. Drop \`degu.app\` into your media folder and double-click. (Or move it to /Applications for a global install — that flavour defaults to ~/Pictures.)"$'\n'
+            BODY+="2. Drop \`degu.app\` into your media folder and double-click. degu strictly serves the folder it lives in — putting it in /Applications means degu will try to serve /Applications, which is almost never what you want."$'\n'
             BODY+="3. Signed with a Developer ID certificate and notarized by Apple — Gatekeeper opens it directly, no right-click workaround needed."$'\n\n'
           fi
           if [[ "$LINUX_RESULT" == "success" ]]; then

@@ -1,34 +1,67 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestIsPersonalDir(t *testing.T) {
-	home := "/Users/me"
-	cases := []struct {
-		path string
-		want bool
-	}{
-		{"/Users/me/Photos", true},
-		{"/Users/me/Photos/2024", true},
-		{"/Users/me/Code/degu", true},
-		{"/Users/me", false},
-		{"/Users/me/Applications", false},
-		{"/Users/me/bin", false},
-		{"/Users/other/Photos", false},
-		{"/Applications", false},
-		{"/usr/local/bin", false},
-		{"/var/folders/x/y", false},
+func TestResolveRootExplicitArg(t *testing.T) {
+	dir := t.TempDir()
+	got, err := resolveRoot(dir)
+	if err != nil {
+		t.Fatalf("resolveRoot(%q): %v", dir, err)
 	}
-	for _, c := range cases {
-		if got := isPersonalDir(c.path, home); got != c.want {
-			t.Errorf("isPersonalDir(%q, %q) = %v, want %v", c.path, home, got, c.want)
+	if got != dir {
+		t.Errorf("resolveRoot(%q) = %q, want %q", dir, got, dir)
+	}
+}
+
+func TestResolveRootExplicitArgRejectsFiles(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "not-a-dir-*")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	f.Close()
+	if _, err := resolveRoot(f.Name()); err == nil {
+		t.Errorf("expected error when arg is a regular file, got nil")
+	}
+}
+
+func TestResolveRootExplicitArgRejectsMissing(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does-not-exist")
+	if _, err := resolveRoot(missing); err == nil {
+		t.Errorf("expected error when arg path is missing, got nil")
+	}
+}
+
+// resolveRoot without an arg defers to bundleHomeDir(), which reads
+// os.Executable() — under `go test` that's the compiled test binary in a
+// temp dir, which both exists and is a directory. So calling resolveRoot("")
+// must succeed and must NOT fall back to ~/Pictures anymore. We don't pin
+// the exact path; we just assert "no error, and it's a real directory" to
+// catch any future drift back toward a Pictures fallback.
+func TestResolveRootNoArgUsesBundleHomeDir(t *testing.T) {
+	got, err := resolveRoot("")
+	if err != nil {
+		t.Fatalf("resolveRoot(\"\"): %v", err)
+	}
+	info, err := os.Stat(got)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("resolveRoot returned %q which is not a directory: %v", got, err)
+	}
+	if home, _ := os.UserHomeDir(); home != "" {
+		pictures := filepath.Join(home, "Pictures")
+		if got == pictures {
+			t.Errorf("resolveRoot fell back to %q — strict mode should not", pictures)
 		}
-	}
-	if isPersonalDir("/Users/me/Photos", "") {
-		t.Errorf("isPersonalDir with empty home should return false")
+		if got == home {
+			t.Errorf("resolveRoot fell back to home %q — strict mode should not", home)
+		}
+		if !strings.HasPrefix(got, os.TempDir()) && !strings.Contains(got, "go-build") {
+			t.Logf("resolveRoot returned %q (likely the test binary's dir under TempDir)", got)
+		}
 	}
 }
 

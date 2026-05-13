@@ -35,9 +35,8 @@ var version = "dev"
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "usage: degu [path]\n\n")
-		fmt.Fprintf(os.Stderr, "  With no path, degu serves the folder it lives in when that\n")
-		fmt.Fprintf(os.Stderr, "  folder is somewhere personal under your home dir. Otherwise\n")
-		fmt.Fprintf(os.Stderr, "  it falls back to ~/Pictures (or ~/ if Pictures is missing).\n\n")
+		fmt.Fprintf(os.Stderr, "  With no path, degu serves the folder the binary lives in.\n")
+		fmt.Fprintf(os.Stderr, "  Pass a path to override.\n\n")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -102,15 +101,16 @@ func main() {
 	}
 }
 
-// resolveRoot picks the media root to scope the server and degu.db to.
+// resolveRoot picks the media root: the folder the binary lives in.
 //
-// CLI arg wins when present (so `open -a degu --args /path` and `degu /path`
-// both work). Otherwise we prefer the folder the bundle lives in, when it's
-// somewhere personal — i.e. the user dropped degu.app or the binary into a
-// media folder under their home dir. /Applications, ~/Applications, and "bin"
-// dirs are excluded so a system or brew install still falls through to the
-// conventional ~/Pictures default. Last resort: ~/, or os.Getwd if home
-// lookup itself fails.
+// CLI arg always wins (so `degu /path` or `open -a degu --args /path` can
+// override). With no arg, we use bundleHomeDir() — the directory the running
+// degu executable sits in. There is NO automatic fallback to ~/Pictures or
+// anywhere else: degu's whole proposition is "drop me into a folder and I
+// serve that folder", which means putting the binary in /Applications,
+// /usr/local/bin, or some other system location is a usage error rather
+// than a hint to silently pivot to ~/Pictures. If os.Executable fails
+// entirely we surface that — the user can recover with an explicit path.
 func resolveRoot(arg string) (string, error) {
 	if arg != "" {
 		abs, err := filepath.Abs(arg)
@@ -127,22 +127,18 @@ func resolveRoot(arg string) (string, error) {
 		return abs, nil
 	}
 
-	home, _ := os.UserHomeDir()
-
-	if dir := bundleHomeDir(); dir != "" && isPersonalDir(dir, home) {
-		if info, err := os.Stat(dir); err == nil && info.IsDir() {
-			return dir, nil
-		}
+	dir := bundleHomeDir()
+	if dir == "" {
+		return "", fmt.Errorf("could not determine the folder this binary lives in; pass an explicit path: degu <folder>")
 	}
-
-	if home == "" {
-		return os.Getwd()
+	info, err := os.Stat(dir)
+	if err != nil {
+		return "", fmt.Errorf("stat binary's folder %q: %w", dir, err)
 	}
-	pics := filepath.Join(home, "Pictures")
-	if info, err := os.Stat(pics); err == nil && info.IsDir() {
-		return pics, nil
+	if !info.IsDir() {
+		return "", fmt.Errorf("binary's folder %q is not a directory", dir)
 	}
-	return home, nil
+	return dir, nil
 }
 
 // bundleHomeDir returns the directory the running degu binary appears to live
@@ -180,31 +176,4 @@ func bundleHomeDirFor(exe string) string {
 		return ""
 	}
 	return dir
-}
-
-// isPersonalDir reports whether p sits somewhere personal under home — a
-// reasonable default for "the user dropped degu next to their media". Returns
-// false for paths outside home, for home itself, and for Applications- or
-// bin-style directories that suggest a system install.
-func isPersonalDir(p, home string) bool {
-	if home == "" {
-		return false
-	}
-	abs, err := filepath.Abs(p)
-	if err != nil {
-		return false
-	}
-	homeAbs, err := filepath.Abs(home)
-	if err != nil {
-		return false
-	}
-	rel, err := filepath.Rel(homeAbs, abs)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return false
-	}
-	switch filepath.Base(abs) {
-	case "Applications", "bin", "sbin":
-		return false
-	}
-	return true
 }

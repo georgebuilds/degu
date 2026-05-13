@@ -40,7 +40,7 @@ When running as the desktop app or headless server, the Wails WKWebView / localh
 
 **Travel-with-files (recommended).** Download the `.app` (macOS), the `degu` binary (Linux), or `degu.exe` (Windows) from [Releases](https://github.com/georgebuilds/degu/releases/latest). Drop it into the folder of media you want to browse and double-click. degu serves that folder — your tags and SQLite DB live next to it, so the whole thing travels as one unit when you move the drive.
 
-If degu can't tell where it lives (you put it in `/Applications`, `/usr/local/bin`, or anywhere outside your home directory), it falls back to `~/Pictures`.
+degu strictly serves the folder the binary lives in; there is no fallback. Putting it in `/Applications` or `/usr/local/bin` means degu will try to serve those directories, which is almost never what you want — use an explicit path arg in that case.
 
 **Or pass an explicit path**:
 ```bash

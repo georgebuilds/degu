@@ -1,9 +1,12 @@
+import { LibraryIcon, TagsIcon, TriageIcon } from './mode-icons.tsx'
+
 export type AppMode = 'triage' | 'library' | 'tags'
 
 type ModeRailProps = {
   mode: AppMode
   onModeChange: (next: AppMode) => void
   rootFolderName: string
+  onOpenSettings: () => void
 }
 
 const buttonBase =
@@ -15,7 +18,12 @@ function railBtnClass(active: boolean): string {
   return `${buttonBase} ${active ? buttonActive : buttonInactive}`
 }
 
-export function ModeRail({ mode, onModeChange, rootFolderName }: ModeRailProps) {
+export function ModeRail({
+  mode,
+  onModeChange,
+  rootFolderName,
+  onOpenSettings,
+}: ModeRailProps) {
   return (
     <aside class="flex w-14 shrink-0 flex-col items-center gap-1.5 border-r border-zinc-800 bg-zinc-900 py-4">
       <div
@@ -32,18 +40,7 @@ export function ModeRail({ mode, onModeChange, rootFolderName }: ModeRailProps) 
         aria-current={mode === 'triage' ? 'page' : undefined}
         onClick={() => onModeChange('triage')}
       >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v5l3 3" />
-        </svg>
+        <TriageIcon />
       </button>
       <button
         type="button"
@@ -53,19 +50,7 @@ export function ModeRail({ mode, onModeChange, rootFolderName }: ModeRailProps) 
         aria-current={mode === 'library' ? 'page' : undefined}
         onClick={() => onModeChange('library')}
       >
-        <svg
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <rect x="3" y="3" width="7" height="7" rx="1" />
-          <rect x="14" y="3" width="7" height="7" rx="1" />
-          <rect x="3" y="14" width="7" height="7" rx="1" />
-          <rect x="14" y="14" width="7" height="7" rx="1" />
-        </svg>
+        <LibraryIcon />
       </button>
       <button
         type="button"
@@ -74,6 +59,23 @@ export function ModeRail({ mode, onModeChange, rootFolderName }: ModeRailProps) 
         aria-label="Tags — manage your vocabulary"
         aria-current={mode === 'tags' ? 'page' : undefined}
         onClick={() => onModeChange('tags')}
+      >
+        <TagsIcon />
+      </button>
+      <div class="my-2 h-px w-6 bg-zinc-700" />
+      <div class="flex-1" />
+      <div
+        class="text-[9px] tracking-wider text-zinc-500 [writing-mode:vertical-rl] [transform:rotate(180deg)]"
+        title={rootFolderName}
+      >
+        {rootFolderName}
+      </div>
+      <button
+        type="button"
+        class="mt-2 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-200"
+        title="Settings"
+        aria-label="Settings"
+        onClick={onOpenSettings}
       >
         <svg
           width="18"
@@ -85,18 +87,10 @@ export function ModeRail({ mode, onModeChange, rootFolderName }: ModeRailProps) 
           stroke-linecap="round"
           stroke-linejoin="round"
         >
-          <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-          <circle cx="7" cy="7" r="1.5" fill="currentColor" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
       </button>
-      <div class="my-2 h-px w-6 bg-zinc-700" />
-      <div class="flex-1" />
-      <div
-        class="text-[9px] tracking-wider text-zinc-500 [writing-mode:vertical-rl] [transform:rotate(180deg)]"
-        title={rootFolderName}
-      >
-        {rootFolderName}
-      </div>
     </aside>
   )
 }

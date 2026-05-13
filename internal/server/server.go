@@ -22,6 +22,11 @@ type Config struct {
 	// for /api/* routes. The Wails desktop binary leaves this false because
 	// it serves through an in-process AssetServer that never sees the network.
 	EnableOriginGuard bool
+	// SelfUpdate enables the POST /api/apply-update endpoint, which downloads
+	// and replaces the running binary in-place. Only the headless CLI sets
+	// this; the desktop .app bundle requires manual updates because in-place
+	// replacement breaks code signing.
+	SelfUpdate bool
 }
 
 type Server struct {
@@ -58,7 +63,12 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write([]byte(`{"version":"` + jsonEscape(s.cfg.Version) + `","root":"` + jsonEscape(s.cfg.Root) + `"}`))
 	})
 
-	apiMux.Handle("GET /api/check-update", api.CheckUpdateHandler(s.cfg.Version))
+	checker := api.CheckUpdateHandler(s.cfg.Version)
+	if s.cfg.SelfUpdate {
+		checker.WithSelfUpdate(true)
+	}
+	apiMux.Handle("GET /api/check-update", checker)
+	apiMux.Handle("POST /api/apply-update", checker.ApplyHandler())
 
 	if s.cfg.DB != nil {
 		apiMux.Handle("/api/tags", methodGate(api.TagsHandler(s.cfg.DB), http.MethodGet, http.MethodPut))

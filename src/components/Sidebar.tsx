@@ -3,7 +3,7 @@ import type { MediaKindFilter } from '../lib/supported-media'
 import type { AggregateTagsProgress } from '../lib/root-tag-index'
 import { ProgressBar } from './ProgressBar.tsx'
 import { tagColor } from '../lib/tag-color'
-import { checkForUpdate, type CheckUpdateResponse } from '../lib/api-client'
+import { checkForUpdate, applyUpdate, type CheckUpdateResponse } from '../lib/api-client'
 
 export type TagCount = { tag: string; count: number }
 
@@ -12,6 +12,9 @@ type UpdateCheckState =
   | { kind: 'checking' }
   | { kind: 'result'; resp: CheckUpdateResponse }
   | { kind: 'error'; msg: string }
+  | { kind: 'installing' }
+  | { kind: 'installed'; version: string }
+  | { kind: 'install-error'; msg: string; releaseUrl?: string }
 
 type SidebarProps = {
   collapsed: boolean
@@ -61,11 +64,33 @@ export function Sidebar({
     setUpdateState({ kind: 'checking' })
     try {
       const resp = await checkForUpdate()
-      setUpdateState({ kind: 'result', resp })
+      if (resp.pendingRestart && resp.pendingVersion) {
+        setUpdateState({ kind: 'installed', version: resp.pendingVersion })
+      } else {
+        setUpdateState({ kind: 'result', resp })
+      }
     } catch (e) {
       setUpdateState({
         kind: 'error',
         msg: e instanceof Error ? e.message : 'check failed',
+      })
+    }
+  }
+
+  async function onInstallClick(releaseUrl?: string) {
+    setUpdateState({ kind: 'installing' })
+    try {
+      const resp = await applyUpdate()
+      if (resp.success && resp.newVersion) {
+        setUpdateState({ kind: 'installed', version: resp.newVersion })
+      } else {
+        setUpdateState({ kind: 'install-error', msg: resp.error || 'unknown error', releaseUrl })
+      }
+    } catch (e) {
+      setUpdateState({
+        kind: 'install-error',
+        msg: e instanceof Error ? e.message : 'install failed',
+        releaseUrl,
       })
     }
   }
@@ -335,7 +360,7 @@ export function Sidebar({
 
       {collapsed ? null : (
         <div class="shrink-0 border-t border-zinc-800 px-3 py-2 text-[11px] text-zinc-500">
-          <UpdateFooter state={updateState} onCheck={onCheckClick} />
+          <UpdateFooter state={updateState} onCheck={onCheckClick} onInstall={onInstallClick} />
         </div>
       )}
     </aside>
@@ -345,14 +370,55 @@ export function Sidebar({
 function UpdateFooter({
   state,
   onCheck,
+  onInstall,
 }: {
   state: UpdateCheckState
   onCheck: () => void
+  onInstall: (releaseUrl?: string) => void
 }) {
-  if (state.kind === 'checking') {
+  if (state.kind === ‘checking’) {
     return <span class="text-zinc-500">Checking for updates…</span>
   }
-  if (state.kind === 'error') {
+  if (state.kind === ‘installing’) {
+    return <span class="text-sky-300">Installing update…</span>
+  }
+  if (state.kind === ‘installed’) {
+    return (
+      <span class="truncate text-emerald-400" title={`v${state.version} installed`}>
+        Updated to v{state.version} — restart degu
+      </span>
+    )
+  }
+  if (state.kind === ‘install-error’) {
+    return (
+      <div class="flex items-center justify-between gap-2">
+        <span class="truncate text-amber-400/80" title={state.msg}>
+          Install failed
+        </span>
+        <div class="flex shrink-0 gap-1">
+          {state.releaseUrl ? (
+            <a
+              class="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:border-zinc-500"
+              href={state.releaseUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Download manually"
+            >
+              ↓
+            </a>
+          ) : null}
+          <button
+            type="button"
+            class="rounded border border-zinc-700 px-2 py-0.5 text-zinc-300 hover:border-zinc-500"
+            onClick={onCheck}
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    )
+  }
+  if (state.kind === ‘error’) {
     return (
       <div class="flex items-center justify-between gap-2">
         <span class="truncate text-amber-400/80" title={state.msg}>
@@ -368,7 +434,7 @@ function UpdateFooter({
       </div>
     )
   }
-  if (state.kind === 'result') {
+  if (state.kind === ‘result’) {
     const { resp } = state
     if (resp.error) {
       return (
@@ -388,6 +454,35 @@ function UpdateFooter({
     }
     if (resp.updateAvailable && resp.latest) {
       const href = resp.assetUrl || resp.releaseUrl
+      if (resp.canSelfUpdate) {
+        return (
+          <div class="flex items-center justify-between gap-2">
+            <span class="truncate text-sky-300" title={`v${resp.current} → v${resp.latest}`}>
+              v{resp.latest} available
+            </span>
+            <div class="flex shrink-0 gap-1">
+              {href ? (
+                <a
+                  class="rounded border border-zinc-700 px-2 py-0.5 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Download manually"
+                >
+                  ↓
+                </a>
+              ) : null}
+              <button
+                type="button"
+                class="rounded border border-sky-500/60 bg-sky-600/20 px-2 py-0.5 text-sky-200 hover:bg-sky-600/30"
+                onClick={() => onInstall(resp.releaseUrl)}
+              >
+                Install
+              </button>
+            </div>
+          </div>
+        )
+      }
       return (
         <div class="flex items-center justify-between gap-2">
           <span class="truncate text-sky-300" title={`v${resp.current} → v${resp.latest}`}>
@@ -408,7 +503,7 @@ function UpdateFooter({
     }
     return (
       <div class="flex items-center justify-between gap-2">
-        <span class="truncate text-zinc-500">Up to date{resp.current ? ` (v${resp.current})` : ''}</span>
+        <span class="truncate text-zinc-500">Up to date{resp.current ? ` (v${resp.current})` : ‘’}</span>
         <button
           type="button"
           class="rounded border border-zinc-800 px-2 py-0.5 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"

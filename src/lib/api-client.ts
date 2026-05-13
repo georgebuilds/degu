@@ -40,6 +40,15 @@ export type CheckUpdateResponse = {
   releaseUrl?: string
   assetUrl?: string
   publishedAt?: string
+  canSelfUpdate?: boolean
+  pendingRestart?: boolean
+  pendingVersion?: string
+  error?: string
+}
+
+export type ApplyUpdateResponse = {
+  success: boolean
+  newVersion?: string
   error?: string
 }
 
@@ -121,6 +130,16 @@ export async function checkForUpdate(signal?: AbortSignal): Promise<CheckUpdateR
     signal,
   })
   await expectOk(r, 'GET /api/check-update')
+  return r.json()
+}
+
+export async function applyUpdate(signal?: AbortSignal): Promise<ApplyUpdateResponse> {
+  const r = await fetch('/api/apply-update', {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+  await expectOk(r, 'POST /api/apply-update')
   return r.json()
 }
 

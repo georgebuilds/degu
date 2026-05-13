@@ -21,6 +21,9 @@ type CheckUpdateResponse struct {
 	ReleaseURL      string `json:"releaseUrl,omitempty"`
 	AssetURL        string `json:"assetUrl,omitempty"`
 	PublishedAt     string `json:"publishedAt,omitempty"`
+	CanSelfUpdate   bool   `json:"canSelfUpdate,omitempty"`
+	PendingRestart  bool   `json:"pendingRestart,omitempty"`
+	PendingVersion  string `json:"pendingVersion,omitempty"`
 	// Error is set when the lookup itself failed (network, rate-limit,
 	// malformed response). UpdateAvailable is false in that case; the UI
 	// surfaces Error as a friendly "couldn't check" message.
@@ -57,15 +60,40 @@ type UpdateChecker struct {
 	// now is injectable so cache-TTL tests are deterministic.
 	now func() time.Time
 
-	mu       sync.Mutex
-	cached   *CheckUpdateResponse
-	cachedAt time.Time
+	selfUpdate     bool
+	exeResolver    func() (string, error)
+	downloadClient *http.Client
+
+	mu             sync.Mutex
+	cached         *CheckUpdateResponse
+	cachedAt       time.Time
+	pendingVersion string
 }
 
 // WithReleaseFetcher overrides the GitHub-API fetcher. Returning an error
 // from the fetcher surfaces as resp.Error to the client (no HTTP failure).
 func (u *UpdateChecker) WithReleaseFetcher(f func(ctx context.Context) (githubRelease, error)) *UpdateChecker {
 	u.fetcher = f
+	return u
+}
+
+// WithSelfUpdate enables the in-place binary update flow. When true, the
+// check-update response includes canSelfUpdate and the apply endpoint works.
+func (u *UpdateChecker) WithSelfUpdate(enabled bool) *UpdateChecker {
+	u.selfUpdate = enabled
+	return u
+}
+
+// WithExeResolver overrides how the running binary's path is resolved.
+// Used in tests to avoid depending on os.Executable.
+func (u *UpdateChecker) WithExeResolver(f func() (string, error)) *UpdateChecker {
+	u.exeResolver = f
+	return u
+}
+
+// WithDownloadClient overrides the HTTP client used for binary downloads.
+func (u *UpdateChecker) WithDownloadClient(c *http.Client) *UpdateChecker {
+	u.downloadClient = c
 	return u
 }
 
@@ -91,6 +119,7 @@ type githubRelease struct {
 
 func (u *UpdateChecker) evaluate(ctx context.Context) CheckUpdateResponse {
 	u.mu.Lock()
+	pending := u.pendingVersion
 	if u.cached != nil && u.now().Sub(u.cachedAt) < updateCacheTTL {
 		cached := *u.cached
 		u.mu.Unlock()
@@ -99,6 +128,18 @@ func (u *UpdateChecker) evaluate(ctx context.Context) CheckUpdateResponse {
 	u.mu.Unlock()
 
 	resp := CheckUpdateResponse{Current: u.current}
+
+	// A self-update was already applied; short-circuit until the process
+	// restarts so the UI shows "restart" instead of "update available".
+	if pending != "" {
+		resp.PendingRestart = true
+		resp.PendingVersion = pending
+		u.mu.Lock()
+		u.cached = &resp
+		u.cachedAt = u.now()
+		u.mu.Unlock()
+		return resp
+	}
 
 	fetch := u.fetcher
 	if fetch == nil {
@@ -118,6 +159,10 @@ func (u *UpdateChecker) evaluate(ctx context.Context) CheckUpdateResponse {
 	cmp, cmpErr := compareSemver(latest, strings.TrimPrefix(u.current, "v"))
 	if cmpErr == nil && cmp > 0 {
 		resp.UpdateAvailable = true
+	}
+
+	if resp.UpdateAvailable && u.selfUpdate && cliAssetSuffix() != "" {
+		resp.CanSelfUpdate = true
 	}
 
 	if pattern := assetPatternForCurrentPlatform(); pattern != "" {

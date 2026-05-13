@@ -76,6 +76,7 @@ func main() {
 		DB:                store,
 		Port:              boundPort,
 		EnableOriginGuard: true,
+		SelfUpdate:        true,
 	})
 
 	httpServer := &http.Server{

@@ -69,6 +69,8 @@ func (s *Server) Handler() http.Handler {
 		apiMux.Handle("/api/save/", methodGate(api.SaveHandler(s.cfg.Root), http.MethodPut, http.MethodPost))
 		apiMux.Handle("/api/move", methodGate(api.MoveHandler(s.cfg.Root, s.cfg.DB), http.MethodPost))
 		apiMux.Handle("/api/move/", methodGate(api.MoveHandler(s.cfg.Root, s.cfg.DB), http.MethodPost))
+		apiMux.Handle("/api/legacy-index/status", methodGate(api.LegacyIndexStatusHandler(s.cfg.Root, s.cfg.DB), http.MethodGet))
+		apiMux.Handle("/api/legacy-index/import", methodGate(api.LegacyIndexImportHandler(s.cfg.Root, s.cfg.DB), http.MethodPost))
 	}
 
 	mux.Handle("/api/", s.originGuard(apiMux))

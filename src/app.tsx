@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'preact/hooks'
 import { AppShell } from './components/AppShell.tsx'
+import { MigrationScreen } from './components/MigrationScreen.tsx'
 import { StarField } from './components/StarField.tsx'
 import { FsaDriver, isFileSystemAccessSupported } from './lib/fsa-driver.ts'
 import {
@@ -8,6 +9,10 @@ import {
   saveRootHandle,
 } from './lib/handle-store.ts'
 import { HttpDriver } from './lib/http-driver.ts'
+import {
+  fetchLegacyIndexStatus,
+  type LegacyIndexStatus,
+} from './lib/legacy-index-api.ts'
 import {
   setActiveDriver,
   type StorageDriver,
@@ -22,6 +27,9 @@ import { flushTagIndexBeacon, initTagIndex } from './lib/tags.ts'
  *     re-request permission (browsers gate this behind a user gesture).
  *   - **needs-folder** — no Go server, no stored handle, need a fresh
  *     `showDirectoryPicker` from a user gesture.
+ *   - **needs-migration** — Go server reachable AND DB empty AND legacy
+ *     index.json exists; the user must accept (verified import) or skip.
+ *     Only used on the HTTP path; FSA users still read JSON natively.
  *   - **connected** — driver is active, tags are loaded, render AppShell.
  *   - **failed** — neither HTTP nor FSA is available; show the original
  *     "couldn't reach the server" guidance.
@@ -30,6 +38,11 @@ type BootPhase =
   | { kind: 'detecting' }
   | { kind: 'reconnect'; handle: FileSystemDirectoryHandle }
   | { kind: 'needs-folder' }
+  | {
+      kind: 'needs-migration'
+      driver: HttpDriver
+      status: LegacyIndexStatus
+    }
   | { kind: 'connected'; driver: StorageDriver }
   | { kind: 'failed'; message: string }
 
@@ -44,6 +57,20 @@ export function App() {
       const http = await HttpDriver.detect()
       if (cancelled) return
       if (http) {
+        // Before connecting, peek at the legacy-index status. If a
+        // pre-SQLite index.json sits next to an empty DB, the user gets a
+        // chance to do a verified import (or skip). Probe failures aren't
+        // fatal — fall through to a normal connect.
+        try {
+          const status = await fetchLegacyIndexStatus()
+          if (cancelled) return
+          if (status.available) {
+            setPhase({ kind: 'needs-migration', driver: http, status })
+            return
+          }
+        } catch {
+          /* probe failed — proceed as if no legacy index. */
+        }
         await connect(http, setPhase)
         return
       }
@@ -153,6 +180,24 @@ export function App() {
                 message: err instanceof Error ? err.message : 'Could not open folder.',
               })
             }
+          }}
+        />
+      </>
+    )
+  }
+
+  if (phase.kind === 'needs-migration') {
+    return (
+      <>
+        <StarField />
+        <MigrationScreen
+          rootFolderName={phase.driver.rootHandle.name}
+          status={phase.status}
+          onDone={() => {
+            void connect(phase.driver, setPhase)
+          }}
+          onSkip={() => {
+            void connect(phase.driver, setPhase)
           }}
         />
       </>

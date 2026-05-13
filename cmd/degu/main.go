@@ -55,11 +55,6 @@ func main() {
 		log.Fatalf("degu: %v", err)
 	}
 	defer store.Close()
-	if imported, err := db.MaybeImportLegacyIndex(bootCtx, store, root); err != nil {
-		log.Fatalf("degu: legacy import: %v", err)
-	} else if imported {
-		fmt.Printf("  imported legacy index.json\n")
-	}
 
 	listener, addr, err := listen(*host, *port)
 	if err != nil {

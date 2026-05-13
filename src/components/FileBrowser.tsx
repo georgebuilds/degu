@@ -525,12 +525,19 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
               setTagFilterResults([])
               return
             }
-            const items = await mapWithConcurrency(
+            // Resolve per-path with .catch(() => null) so a single stale
+            // entry (path stored in the tag index but no longer on disk)
+            // can't reject the whole batch and leave the user staring at
+            // an empty list.
+            const resolved = await mapWithConcurrency(
               paths,
-              p => resolvePathToFileListItem(rootHandle, p),
+              p => resolvePathToFileListItem(rootHandle, p).catch(() => null),
               8
             )
             if (gen !== tagFilterScanGen.current) return
+            const items = resolved.filter(
+              (x): x is NonNullable<typeof x> => x !== null
+            )
             setTagFilterResults(items)
             const tagCache = new Map<string, string[]>()
             const merged: Record<string, string[]> = {}
@@ -577,13 +584,17 @@ export function FileBrowser({ rootHandle }: FileBrowserProps) {
         setTagFilterLoading(false)
         return
       }
+      // Same per-path catch as the untagged path above — see comment there.
       void mapWithConcurrency(
         paths,
-        p => resolvePathToFileListItem(rootHandle, p),
+        p => resolvePathToFileListItem(rootHandle, p).catch(() => null),
         8
       )
-        .then(items => {
+        .then(resolved => {
           if (gen !== tagFilterScanGen.current) return
+          const items = resolved.filter(
+            (x): x is NonNullable<typeof x> => x !== null
+          )
           setTagFilterResults(items)
           const tagCache = new Map<string, string[]>()
           const merged: Record<string, string[]> = {}

@@ -2,10 +2,12 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 )
 
@@ -120,23 +122,72 @@ func TestIsEmpty(t *testing.T) {
 	}
 }
 
-func TestMaybeImportLegacyIndex(t *testing.T) {
+func TestProbeLegacyIndex(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
+
+	d, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	// No JSON, empty DB → unavailable.
+	got, err := ProbeLegacyIndex(ctx, d, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Available {
+		t.Errorf("no JSON: got Available=true")
+	}
+
+	legacy := `{
+		"a/photo.jpg": ["family", "trip"],
+		"./a/photo.jpg": ["family", "extra"],
+		"b/clip.mp4": ["work"]
+	}`
+	if err := os.WriteFile(filepath.Join(dir, legacyIndexFilename), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = ProbeLegacyIndex(ctx, d, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Available {
+		t.Errorf("JSON present, empty DB: got Available=false")
+	}
+	// Two distinct paths after canonicalisation (a/photo.jpg and b/clip.mp4).
+	if got.EntryCount != 2 {
+		t.Errorf("EntryCount: got %d, want 2 (after canonical-path merge)", got.EntryCount)
+	}
+}
+
+func TestImportLegacyIndex_Verification(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	// Create a real file at a/photo.jpg, leave b/clip.mp4 absent.
+	if err := os.MkdirAll(filepath.Join(dir, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a", "photo.jpg"), []byte("fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	legacy := `{
 		"a/photo.jpg": ["family", "trip"],
 		"b/clip.mp4": ["work"],
 		"__degu": {
 			"videoLoops": {
-				"b/clip.mp4": [
-					{"id":"L1","startSec":1.5,"endSec":4.25},
-					{"id":"bad","startSec":5,"endSec":5},
-					{"id":"","startSec":6,"endSec":7}
-				]
+				"b/clip.mp4": [{"id":"L1","startSec":1.5,"endSec":4.25}],
+				"a/photo.jpg": [{"id":"K1","startSec":0,"endSec":2}]
 			},
 			"tagCreatedAt": {"family":"2024-04-12T18:42:00.000Z"},
-			"lastReviewed": {"a/photo.jpg":"2024-04-13T10:00:00.000Z"}
+			"lastReviewed": {
+				"a/photo.jpg":"2024-04-13T10:00:00.000Z",
+				"b/clip.mp4":"2024-04-13T10:00:00.000Z"
+			}
 		}
 	}`
 	if err := os.WriteFile(filepath.Join(dir, legacyIndexFilename), []byte(legacy), 0o644); err != nil {
@@ -149,39 +200,83 @@ func TestMaybeImportLegacyIndex(t *testing.T) {
 	}
 	defer d.Close()
 
-	imported, err := MaybeImportLegacyIndex(ctx, d, dir)
+	res, err := ImportLegacyIndex(ctx, d, dir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !imported {
-		t.Fatalf("MaybeImportLegacyIndex: got false, want true")
+	if res.Imported != 1 {
+		t.Errorf("Imported: got %d, want 1 (only a/photo.jpg exists)", res.Imported)
+	}
+	if len(res.Missing) != 1 || res.Missing[0] != "b/clip.mp4" {
+		t.Errorf("Missing: got %v, want [b/clip.mp4]", res.Missing)
+	}
+
+	// JSON file should be deleted post-import.
+	if _, err := os.Stat(filepath.Join(dir, legacyIndexFilename)); !os.IsNotExist(err) {
+		t.Errorf("legacy JSON should have been removed; stat err=%v", err)
 	}
 
 	state, err := LoadTagState(ctx, d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := state.Tags["a/photo.jpg"]; len(got) != 2 {
-		t.Errorf("Tags[a/photo.jpg]: got %v, want 2 entries", got)
+	if _, ok := state.Tags["b/clip.mp4"]; ok {
+		t.Errorf("Tags should not contain unverified path b/clip.mp4")
 	}
-	if got := state.VideoLoops["b/clip.mp4"]; len(got) != 1 {
-		t.Errorf("VideoLoops[b/clip.mp4]: got %v, want 1 valid loop (the others should be dropped)", got)
+	if _, ok := state.VideoLoops["b/clip.mp4"]; ok {
+		t.Errorf("VideoLoops should not contain unverified path b/clip.mp4")
 	}
-	if state.TagCreatedAt["family"] == "" {
-		t.Errorf("TagCreatedAt[family] should be present")
+	if _, ok := state.LastReviewed["b/clip.mp4"]; ok {
+		t.Errorf("LastReviewed should not contain unverified path b/clip.mp4")
 	}
-
-	// Calling again must be a no-op since the DB is no longer empty.
-	imported2, err := MaybeImportLegacyIndex(ctx, d, dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if imported2 {
-		t.Errorf("second import should be skipped")
+	if _, ok := state.LastReviewed["a/photo.jpg"]; !ok {
+		t.Errorf("LastReviewed should retain verified path a/photo.jpg")
 	}
 }
 
-func TestImportSkippedWhenLegacyMissing(t *testing.T) {
+func TestImportLegacyIndex_Dedup(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	if err := os.MkdirAll(filepath.Join(dir, "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a", "photo.jpg"), []byte("fake"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Two keys canonicalising to the same path, with overlapping tags and
+	// duplicates within each list.
+	legacy := `{
+		"a/photo.jpg":   ["family", "trip", "family"],
+		"./a/photo.jpg": ["family", "extra", "  extra  "]
+	}`
+	if err := os.WriteFile(filepath.Join(dir, legacyIndexFilename), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	if _, err := ImportLegacyIndex(ctx, d, dir, nil); err != nil {
+		t.Fatal(err)
+	}
+	state, err := LoadTagState(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := state.Tags["a/photo.jpg"]
+	sort.Strings(got)
+	want := []string{"extra", "family", "trip"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Tags[a/photo.jpg]: got %v, want %v", got, want)
+	}
+}
+
+func TestImportLegacyIndex_NoOpWhenDBPopulated(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 	d, err := Open(ctx, dir)
@@ -190,11 +285,81 @@ func TestImportSkippedWhenLegacyMissing(t *testing.T) {
 	}
 	defer d.Close()
 
-	imported, err := MaybeImportLegacyIndex(ctx, d, dir)
+	// Pre-populate the DB so IsEmpty() is false.
+	if err := SaveTagState(ctx, d, &TagState{
+		Tags:         map[string][]string{"x.jpg": {"t"}},
+		VideoLoops:   map[string][]VideoLoop{},
+		TagCreatedAt: map[string]string{},
+		LastReviewed: map[string]string{},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	legacy := `{"a/photo.jpg":["family"]}`
+	if err := os.WriteFile(filepath.Join(dir, legacyIndexFilename), []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Probe should report unavailable when DB is populated.
+	probe, err := ProbeLegacyIndex(ctx, d, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if imported {
-		t.Errorf("nothing to import; got imported=true")
+	if probe.Available {
+		t.Errorf("populated DB: ProbeLegacyIndex returned Available=true")
+	}
+
+	// Import should refuse.
+	if _, err := ImportLegacyIndex(ctx, d, dir, nil); err == nil {
+		t.Errorf("populated DB: ImportLegacyIndex should refuse, got nil error")
+	}
+}
+
+func TestImportLegacyIndex_ProgressEvents(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+
+	// 200 real files so the import emits progress mid-way through the
+	// verify phase (the implementation reports every max(50, total/100)).
+	for i := 0; i < 200; i++ {
+		p := filepath.Join(dir, "f", "x"+strconv.Itoa(i)+".jpg")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte{0x00}, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	jsonMap := map[string][]string{}
+	for i := 0; i < 200; i++ {
+		jsonMap["f/x"+strconv.Itoa(i)+".jpg"] = []string{"t"}
+	}
+	jsonBytes, _ := json.Marshal(jsonMap)
+	if err := os.WriteFile(filepath.Join(dir, legacyIndexFilename), jsonBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	d, err := Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+
+	var events []ImportProgress
+	if _, err := ImportLegacyIndex(ctx, d, dir, func(p ImportProgress) {
+		events = append(events, p)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(events) < 3 {
+		t.Fatalf("expected at least 3 progress events, got %d", len(events))
+	}
+	if events[0].Phase != "verifying" || events[0].Done != 0 || events[0].Total != 200 {
+		t.Errorf("first event = %+v, want {verifying 0 200}", events[0])
+	}
+	last := events[len(events)-1]
+	if last.Phase != "done" || last.Done != 200 {
+		t.Errorf("last event = %+v, want {done 200 200}", last)
 	}
 }

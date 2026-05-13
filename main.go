@@ -53,12 +53,6 @@ func main() {
 	}
 	defer store.Close()
 
-	if imported, err := db.MaybeImportLegacyIndex(ctx, store, root); err != nil {
-		log.Fatalf("degu: legacy import: %v", err)
-	} else if imported {
-		log.Printf("degu: imported legacy index.json")
-	}
-
 	srv := server.New(server.Config{
 		Root:    root,
 		Version: version,

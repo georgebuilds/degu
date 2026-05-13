@@ -65,7 +65,18 @@ export const FileThumbnail = memo(function FileThumbnail({
     if (urlRef.current) return
     let cancelled = false
     void (async () => {
-      const file = await item.handle.getFile()
+      // If the file is gone (path stored in the tag index but no longer on
+      // disk after a reorg / cross-OS open) the fetch rejects with a 404.
+      // Catching here is what keeps a stale entry from poisoning render —
+      // the migration screen tries to prevent this at import time, but
+      // defense in depth matters since files can be moved while the app is
+      // running.
+      let file: File
+      try {
+        file = await item.handle.getFile()
+      } catch {
+        return
+      }
       if (cancelled) return
       let blobOrFile: Blob
       try {

@@ -217,7 +217,10 @@ func TestEmptyPeopleList(t *testing.T) {
 	srv, cleanup := setupPeopleServer(t)
 	defer cleanup()
 
-	res, _ := srv.Client().Get(srv.URL + "/api/people")
+	res, err := srv.Client().Get(srv.URL + "/api/people")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer res.Body.Close()
 	var people []db.Person
 	json.NewDecoder(res.Body).Decode(&people)

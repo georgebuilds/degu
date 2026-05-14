@@ -92,8 +92,9 @@ export async function trimVideoStreamCopy(options: {
 
   const dot = file.name.lastIndexOf('.')
   const ext = dot >= 0 ? file.name.slice(dot) : '.mp4'
-  const inputName = `in${ext}`
-  const outputName = `out${ext}`
+  const tag = Math.random().toString(36).slice(2, 10)
+  const inputName = `trim_in_${tag}${ext}`
+  const outputName = `trim_out_${tag}${ext}`
 
   const ffmpeg = await getLoadedFFmpeg(signal)
 

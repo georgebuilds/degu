@@ -44,8 +44,9 @@ export async function scrubFileWithFFmpeg(options: {
 
   const dot = file.name.lastIndexOf('.')
   const ext = dot >= 0 ? file.name.slice(dot) : ''
-  const inputName = `in${ext}`
-  const outputName = `out${ext}`
+  const tag = Math.random().toString(36).slice(2, 10)
+  const inputName = `scrub_in_${tag}${ext}`
+  const outputName = `scrub_out_${tag}${ext}`
 
   const ffmpeg = await getLoadedFFmpeg(signal)
 

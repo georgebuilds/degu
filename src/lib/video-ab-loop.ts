@@ -23,7 +23,7 @@ export function useVideoABLoop(
     const clamp = () => {
       const d = el.duration
       const end = Number.isFinite(d) && d > 0
-        ? Math.min(endSec, d - VIDEO_AB_LOOP_EPS)
+        ? Math.min(endSec, d)
         : endSec
       const start = Math.max(0, startSec)
       const t = el.currentTime

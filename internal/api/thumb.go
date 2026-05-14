@@ -70,7 +70,11 @@ func ThumbHandler(root string) http.Handler {
 			return
 		}
 		defer f.Close()
-		thumbInfo, _ := f.Stat()
+		thumbInfo, err := f.Stat()
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		// See file.go: relax the SPA-shell CORP for media-style bytes.

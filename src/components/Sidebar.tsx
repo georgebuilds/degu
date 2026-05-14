@@ -376,20 +376,20 @@ function UpdateFooter({
   onCheck: () => void
   onInstall: (releaseUrl?: string) => void
 }) {
-  if (state.kind === ‘checking’) {
+  if (state.kind === 'checking') {
     return <span class="text-zinc-500">Checking for updates…</span>
   }
-  if (state.kind === ‘installing’) {
+  if (state.kind === 'installing') {
     return <span class="text-sky-300">Installing update…</span>
   }
-  if (state.kind === ‘installed’) {
+  if (state.kind === 'installed') {
     return (
       <span class="truncate text-emerald-400" title={`v${state.version} installed`}>
         Updated to v{state.version} — restart degu
       </span>
     )
   }
-  if (state.kind === ‘install-error’) {
+  if (state.kind === 'install-error') {
     return (
       <div class="flex items-center justify-between gap-2">
         <span class="truncate text-amber-400/80" title={state.msg}>
@@ -418,11 +418,11 @@ function UpdateFooter({
       </div>
     )
   }
-  if (state.kind === ‘error’) {
+  if (state.kind === 'error') {
     return (
       <div class="flex items-center justify-between gap-2">
         <span class="truncate text-amber-400/80" title={state.msg}>
-          Couldn’t check for updates
+          Couldn't check for updates
         </span>
         <button
           type="button"
@@ -434,13 +434,13 @@ function UpdateFooter({
       </div>
     )
   }
-  if (state.kind === ‘result’) {
+  if (state.kind === 'result') {
     const { resp } = state
     if (resp.error) {
       return (
         <div class="flex items-center justify-between gap-2">
           <span class="truncate text-amber-400/80" title={resp.error}>
-            Couldn’t check for updates
+            Couldn't check for updates
           </span>
           <button
             type="button"
@@ -503,7 +503,7 @@ function UpdateFooter({
     }
     return (
       <div class="flex items-center justify-between gap-2">
-        <span class="truncate text-zinc-500">Up to date{resp.current ? ` (v${resp.current})` : ‘’}</span>
+        <span class="truncate text-zinc-500">Up to date{resp.current ? ` (v${resp.current})` : ''}</span>
         <button
           type="button"
           class="rounded border border-zinc-800 px-2 py-0.5 text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"

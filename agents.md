@@ -49,7 +49,17 @@ cmd/degu/            # Headless CLI binary — serves SPA + /api/* on localhost:
 internal/
   server/            # HTTP handler: embeds SPA bundle, routes /api/*, sets COOP/COEP headers
   db/                # SQLite store (tags, video loops, timestamps) + legacy index.json importer
-  api/               # /api/* route handlers: scan, tags, stats, thumb, file, move
+  api/               # /api/* route handlers:
+                     #   info                — server version + connected root (boot probe)
+                     #   scan, tags, stats   — directory listing, tag payload (GET/PUT), storage stats
+                     #   thumb, file, move   — thumbnails, file bytes (GET/HEAD/DELETE), rename/move
+                     #   people              — person CRUD (GET/POST; /api/people/{id} PUT/DELETE)
+                     #   faces               — face regions (GET/POST; /api/faces/{id} PUT/DELETE,
+                     #                         /api/faces/by-person/{id} list by person)
+                     #   legacy-index/status — probe for an importable legacy index.json
+                     #   legacy-index/import — SSE-streamed one-shot import of that index.json
+                     #   check-update        — query GitHub for the latest release
+                     #   apply-update        — SHA256-verified in-place CLI binary replacement (CLI only)
 
 src/
   app.tsx              # Boot: detect HTTP driver → FSA reconnect → FSA pick → fail
@@ -72,6 +82,12 @@ src/
     TagEditor.test.tsx           # DOM render test (happy-dom)
     TagsScreen.tsx               # Tag vocabulary manager: all tags with counts, creation dates, stale-file indicators
     TriageScreen.tsx             # Primary mode: card-by-card tagging of stale / untagged files
+    PeopleScreen.tsx             # People mode: person CRUD + browse the face regions tagged to each person
+    FaceOverlay.tsx              # Draw / assign face-region boxes over a previewed image; links faces to people
+    MigrationScreen.tsx          # Legacy index.json import flow: idle → SSE progress → done / error
+    SettingsModal.tsx            # Settings: pick the default start mode (Triage / Library / Tags / People)
+    IntroRibbon.tsx              # Dismissible one-time banner pointing first-time users at Settings
+    mode-icons.tsx               # Shared SVG icons for each app mode (Triage / Library / Tags / People)
     MoreTagsQuickAddDropdown.tsx # "More" submenu used by quick-add menus and pill rows
     NewTagQuickAddDialog.tsx     # Dialog for creating a new tag from the quick-add UI
     NormalizeFilenamesModal.tsx  # Configure → run → report flow for bulk filename rewrite
@@ -79,6 +95,7 @@ src/
     StorageStatsModal.tsx        # Storage breakdown by kind / extension / tag
     FileContextMenu.tsx          # Generic positioned context menu container
     ProgressBar.tsx              # Determinate / indeterminate bar (modals, scans)
+    use-modal-stack.ts           # Shared modal stack: only the topmost modal handles Escape
   lib/
     storage-driver.ts   # StorageDriver interface + DriverCapabilities + module-level active singleton
     fsa-driver.ts       # FsaDriver: FSA-backed driver — tags persisted to index.json at root
@@ -102,6 +119,9 @@ src/
     handle-store.ts     # IndexedDB persistence of the FSA root handle (FSA mode only)
     http-handles.ts     # FSA-shaped shims over HTTP: HttpFileHandle / HttpDirectoryHandle dispatch to /api/*
     api-client.ts       # fetch wrappers for all /api/* endpoints
+    people.ts           # People & face-region API client; in-memory cache + version-bump subscriptions
+    settings.ts         # localStorage-backed prefs: default start mode + intro-ribbon dismissal
+    legacy-index-api.ts # Client for /api/legacy-index/*: status probe + SSE-streamed import
     throttle.ts         # throttleVoid / throttle / mapWithConcurrency
     format-bytes.ts     # Human-readable byte size
     format-media-time.ts # Seconds → m:ss / h:mm:ss
@@ -162,10 +182,13 @@ Edits are **debounced** to disk/server (400 ms); `flushTagIndex` runs on `pagehi
 
 ### App modes
 
-`AppShell` exposes three modes via `ModeRail`:
+`AppShell` exposes four modes via `ModeRail` (mode strings validated by `isAppMode` in `settings.ts`):
 - **Triage** (default) — card-by-card tagging of stale/untagged files (`TriageScreen`). The primary verb.
 - **Library** — full file browser with list/thumb views, search, tag filter, viewer pane, and modals (`FileBrowser`).
 - **Tags** — tag vocabulary manager: all tags with counts, creation dates, and stale-file indicators (`TagsScreen`).
+- **People** — person manager: create/rename/delete people and browse the face regions tagged to each (`PeopleScreen`). Face regions are drawn and assigned to people via `FaceOverlay` over an image preview.
+
+The default start mode is configurable in `SettingsModal` and persisted by `settings.ts`; `loadDefaultStartMode` falls back to `triage`.
 
 ### Video loops and trim
 
@@ -177,6 +200,22 @@ Edits are **debounced** to disk/server (400 ms); `flushTagIndex` runs on `pagehi
 - `StorageStatsModal` runs `computeStorageStats` (one tree walk) for byte totals broken down by kind, extension, tag, and untagged.
 - `NormalizeFilenamesModal` drives `runNormalizeFilenames`: collect paths, plan substring removals, rename via `FileSystemFileHandle.move` (or `/api/move/batch` in HTTP mode), rewrite tag keys, flush.
 - `ScrubMetadataModal` drives `runScrubMetadata`: collect paths (or use caller-supplied list), call `ffmpeg.wasm` with `-map_metadata -1 -c copy` (strip) or `-metadata k=v` (modify), then overwrite the original via `createWritable`. Modify is **video-only** in v1 — images skip the per-file modify call; a follow-up will add JPEG/PNG EXIF write paths.
+
+### People and face regions
+
+People are a separate CRUD resource from tags (`internal/api/people.go`, client in `lib/people.ts`) — each person and each face region is an individual row mutated independently rather than a full-state replacement. A **face region** (`FacesHandler`, also in `internal/api/people.go`) is a box (`x/y/w/h`, normalised) on a media path, optionally linked to a person, with a `source` of `manual` / `auto` / `confirmed`. `FaceOverlay` lets you draw a box over an image preview and assign it to a new or existing person; `PeopleScreen` (People mode) lists people and the faces tagged to each via `GET /api/faces/by-person/{id}`. Like tags, `people.ts` keeps an in-memory cache invalidated on writes, with a version-bump subscription so screens re-render.
+
+### Self-update
+
+The headless CLI can update itself in place (the desktop `.app` cannot — in-place replacement breaks code signing, so `SelfUpdate` is only set by the CLI). `GET /api/check-update` (`internal/api/update.go`) queries the latest GitHub release, compares semver against the running version (results cached 5 min to respect GitHub's unauthenticated rate limit), and reports `updateAvailable` / `canSelfUpdate`. `POST /api/apply-update` (`internal/api/selfupdate.go`) downloads the matching CLI binary plus its `.sha256` sidecar, verifies the SHA256 hash before trusting the download, `chmod`s it executable, and atomically renames it over the running executable (Windows moves the locked exe aside first). The user must then restart; until then `check-update` reports `pendingRestart`/`pendingVersion`. An in-flight apply is single-flighted via a mutex.
+
+### Settings persistence
+
+`lib/settings.ts` stores user prefs in `localStorage`: `degu_default_mode` (the default start mode, validated by `isAppMode`, falling back to `triage`) and `degu_intro_dismissed_v1` (whether the first-run `IntroRibbon` has been dismissed). Both expose subscribe helpers so the UI reacts to changes, and both fail safe when storage is unavailable (private mode / quota): the default mode reads as `triage` and the intro reads as already-dismissed.
+
+### Legacy index migration
+
+When the Go server detects an importable legacy `index.json` at the connected root (`GET /api/legacy-index/status` → `available` + `entryCount`), the SPA shows `MigrationScreen` before `AppShell`. Importing (`POST /api/legacy-index/import`, `internal/api/legacy_import.go`) verifies each path against the folder, imports the surviving entries into the SQLite store, drops anything missing, and removes the old JSON file. Progress streams back as Server-Sent Events (`verifying` → `saving` → `done`) consumed over `fetch` by `lib/legacy-index-api.ts`; a final `result` event carries `imported` / `missing` / `skippedMalformed`. The user can skip, and on error the original `index.json` is left untouched for retry.
 
 ## Conventions for changes
 

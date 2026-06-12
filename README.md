@@ -2,6 +2,8 @@
 
 *a media browser that travels with your files.*
 
+[![codecov](https://codecov.io/gh/georgebuilds/degu/graph/badge.svg)](https://codecov.io/gh/georgebuilds/degu)
+
 A local-first media browser. Browse, search, tag, preview, A–B-loop, trim, and rename media files without uploading anything to the cloud.
 
 degu runs two ways:

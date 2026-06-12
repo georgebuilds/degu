@@ -630,7 +630,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
 

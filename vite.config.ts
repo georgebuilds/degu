@@ -50,5 +50,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    coverage: {
+      provider: 'v8',
+      // lcov feeds the Codecov upload in CI; text prints a local summary.
+      reporter: ['text', 'lcov'],
+      include: ['src/**/*.{ts,tsx}'],
+    },
   },
 })

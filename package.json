@@ -1,7 +1,7 @@
 {
   "name": "degu",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
@@ -23,6 +23,7 @@
     "@tailwindcss/vite": "^4.2.2",
     "@testing-library/preact": "^3.2.4",
     "@types/node": "^24.12.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "happy-dom": "^20.8.9",
     "typescript": "~6.0.3",
     "vite": "^8.0.1",

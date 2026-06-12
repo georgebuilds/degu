@@ -14,15 +14,16 @@ import (
 
 func setupPeopleServer(t *testing.T) (*httptest.Server, func()) {
 	t.Helper()
-	d, err := db.Open(context.Background(), t.TempDir())
+	root := t.TempDir()
+	d, err := db.Open(context.Background(), root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/people", PeopleHandler(d))
 	mux.Handle("/api/people/", PeopleHandler(d))
-	mux.Handle("/api/faces", FacesHandler(d))
-	mux.Handle("/api/faces/", FacesHandler(d))
+	mux.Handle("/api/faces", FacesHandler(root, d))
+	mux.Handle("/api/faces/", FacesHandler(root, d))
 	srv := httptest.NewServer(mux)
 	return srv, func() { srv.Close(); d.Close() }
 }
@@ -226,6 +227,54 @@ func TestEmptyPeopleList(t *testing.T) {
 	json.NewDecoder(res.Body).Decode(&people)
 	if len(people) != 0 {
 		t.Errorf("empty list should have 0 entries, got %d", len(people))
+	}
+}
+
+func TestListFacesPathEscape(t *testing.T) {
+	srv, cleanup := setupPeopleServer(t)
+	defer cleanup()
+
+	res, err := srv.Client().Get(srv.URL + "/api/faces?path=../../escape")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("escaping path: got %d, want 400", res.StatusCode)
+	}
+}
+
+func TestCreateFacePathEscape(t *testing.T) {
+	srv, cleanup := setupPeopleServer(t)
+	defer cleanup()
+
+	body := `{"relPath":"../../etc/passwd","personId":1,"x":0.1,"y":0.2,"w":0.3,"h":0.4}`
+	res, err := srv.Client().Post(srv.URL+"/api/faces", "application/json",
+		strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("escaping relPath: got %d, want 400", res.StatusCode)
+	}
+}
+
+func TestDecodeJSONBodyTooLarge(t *testing.T) {
+	srv, cleanup := setupPeopleServer(t)
+	defer cleanup()
+
+	// Build a JSON body whose name field exceeds the 1 MiB MaxBytesReader limit.
+	huge := strings.Repeat("a", (1<<20)+1024)
+	body := `{"name":"` + huge + `"}`
+	res, err := srv.Client().Post(srv.URL+"/api/people", "application/json",
+		strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("oversized body: got %d, want 400", res.StatusCode)
 	}
 }
 

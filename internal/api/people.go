@@ -31,7 +31,7 @@ func PeopleHandler(d *sql.DB) http.Handler {
 		var body struct {
 			Name string `json:"name"`
 		}
-		if err := decodeJSON(r, &body); err != nil {
+		if err := decodeJSON(w, r, &body); err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -62,7 +62,7 @@ func PeopleHandler(d *sql.DB) http.Handler {
 		var body struct {
 			Name string `json:"name"`
 		}
-		if err := decodeJSON(r, &body); err != nil {
+		if err := decodeJSON(w, r, &body); err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -108,13 +108,17 @@ func PeopleHandler(d *sql.DB) http.Handler {
 }
 
 // FacesHandler handles /api/faces, /api/faces/{id}, and /api/faces/by-person/{id}.
-func FacesHandler(d *sql.DB) http.Handler {
+func FacesHandler(root string, d *sql.DB) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/faces", func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Query().Get("path")
 		if path == "" {
 			writeJSONError(w, http.StatusBadRequest, "path query parameter required")
+			return
+		}
+		if _, err := SafeJoin(root, path); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid path")
 			return
 		}
 		regions, err := db.ListFaceRegions(r.Context(), d, path)
@@ -147,13 +151,17 @@ func FacesHandler(d *sql.DB) http.Handler {
 
 	mux.HandleFunc("POST /api/faces", func(w http.ResponseWriter, r *http.Request) {
 		var body db.FaceRegion
-		if err := decodeJSON(r, &body); err != nil {
+		if err := decodeJSON(w, r, &body); err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		body.RelPath = strings.TrimSpace(body.RelPath)
 		if body.RelPath == "" {
 			writeJSONError(w, http.StatusBadRequest, "relPath is required")
+			return
+		}
+		if _, err := SafeJoin(root, body.RelPath); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid path")
 			return
 		}
 		if body.Source == "" {
@@ -175,7 +183,7 @@ func FacesHandler(d *sql.DB) http.Handler {
 			return
 		}
 		var body db.FaceRegion
-		if err := decodeJSON(r, &body); err != nil {
+		if err := decodeJSON(w, r, &body); err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -221,7 +229,7 @@ func writeJSON(w http.ResponseWriter, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func decodeJSON(r *http.Request, v any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<20))
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
 	return dec.Decode(v)
 }

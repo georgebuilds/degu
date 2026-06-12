@@ -63,7 +63,8 @@ const STATS_TIMEOUT_MS = 30_000
  * combined signal plus a `cancel()` to clear the timeout when the request
  * resolves on its own.
  */
-function withDefaultTimeout(
+// Exported for unit testing the timeout/abort composition.
+export function withDefaultTimeout(
   caller: AbortSignal | undefined,
   ms: number
 ): { signal: AbortSignal; cancel: () => void } {

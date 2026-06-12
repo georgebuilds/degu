@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'preact/hooks'
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks'
 import {
   streamLegacyIndexImport,
   type ImportProgress,
@@ -30,19 +30,28 @@ export function MigrationScreen({
 }: MigrationScreenProps) {
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
 
+  // Guards the async import loop from calling setPhase after the user skips or
+  // otherwise unmounts mid-import (which would leak setState onto a dead component).
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
+
   const run = useCallback(() => {
     setPhase({ kind: 'running', progress: null })
     void (async () => {
       try {
         const result = await streamLegacyIndexImport({
-          onProgress: p => setPhase({ kind: 'running', progress: p }),
+          onProgress: p => {
+            if (mountedRef.current) setPhase({ kind: 'running', progress: p })
+          },
         })
-        setPhase({ kind: 'done', result })
+        if (mountedRef.current) setPhase({ kind: 'done', result })
       } catch (err) {
-        setPhase({
-          kind: 'error',
-          message: err instanceof Error ? err.message : String(err),
-        })
+        if (mountedRef.current) {
+          setPhase({
+            kind: 'error',
+            message: err instanceof Error ? err.message : String(err),
+          })
+        }
       }
     })()
   }, [])

@@ -37,7 +37,6 @@ export function FaceOverlay({ tagStorageKey, imgRef }: FaceOverlayProps) {
   const [draft, setDraft] = useState<DraftBox | null>(null)
   const [assigningId, setAssigningId] = useState<number | null>(null)
   const [personQuery, setPersonQuery] = useState('')
-  const [_newPersonMode, setNewPersonMode] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
   const assignInputRef = useRef<HTMLInputElement>(null)
   const version = usePeopleVersion()
@@ -105,7 +104,6 @@ export function FaceOverlay({ tagStorageKey, imgRef }: FaceOverlayProps) {
       setRegions(prev => [...prev, region])
       setAssigningId(region.id)
       setPersonQuery('')
-      setNewPersonMode(false)
       requestAnimationFrame(() => assignInputRef.current?.focus())
     } catch { /* ignore */ }
   }, [draft, tagStorageKey])
@@ -144,7 +142,6 @@ export function FaceOverlay({ tagStorageKey, imgRef }: FaceOverlayProps) {
     try {
       const person = await createPerson(name)
       await assignPerson(regionId, person.id)
-      setNewPersonMode(false)
     } catch { /* ignore */ }
   }, [assignPerson])
 
@@ -226,7 +223,6 @@ export function FaceOverlay({ tagStorageKey, imgRef }: FaceOverlayProps) {
                   e.stopPropagation()
                   setAssigningId(isAssigning ? null : r.id)
                   setPersonQuery('')
-                  setNewPersonMode(false)
                   if (!isAssigning) {
                     requestAnimationFrame(() => assignInputRef.current?.focus())
                   }
@@ -296,7 +292,6 @@ export function FaceOverlay({ tagStorageKey, imgRef }: FaceOverlayProps) {
               value={personQuery}
               onInput={e => {
                 setPersonQuery((e.target as HTMLInputElement).value)
-                setNewPersonMode(false)
               }}
               onKeyDown={e => {
                 if (e.key === 'Escape') { setAssigningId(null); e.stopPropagation() }

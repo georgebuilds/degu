@@ -61,6 +61,11 @@ export class FsaDriver implements StorageDriver {
     this.rootName = handle.name
   }
 
+  /** Test-only: build a driver directly from a (possibly mocked) handle. */
+  static forTesting(handle: FileSystemDirectoryHandle): FsaDriver {
+    return new FsaDriver(handle)
+  }
+
   /** Prompts the user to pick a folder. MUST be invoked from a user gesture. */
   static async connect(): Promise<FsaDriver> {
     if (!isFileSystemAccessSupported()) {
@@ -124,17 +129,15 @@ export class FsaDriver implements StorageDriver {
       create: true,
     })) as WritableCapableFileHandle
     const writable = await tmp.createWritable()
-    let writeOk = false
     try {
       await writable.write(text)
-      writeOk = true
-    } finally {
-      if (!writeOk) {
-        try { await writable.close() } catch { /* swallow */ }
-      } else {
-        await writable.close()
-      }
+    } catch (err) {
+      try { await writable.close() } catch { /* swallow */ }
+      // Don't leave the half-written tmp file orphaned on disk.
+      await this.removeIfExists(INDEX_TMP_FILE)
+      throw err
     }
+    await writable.close()
 
     if (await tryRenameTmpOverIndex(tmp)) {
       return
